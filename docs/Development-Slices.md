@@ -56,20 +56,20 @@ Build **incrementally, test-driven**, with AI assistance. Grammar references wil
 
 *(To be fleshed out in Slice 0.5)*
 
-**Rough scope**: Symbol table construction, scope resolution, collision detection across merged files. Validation diagnostics: vector member access ∈ {x,y,z} (**SB3001**), comprehension generators only inside vectors (**SB3002**). See [Diagnostics.md](Diagnostics.md).
+**Rough scope**: Symbol table construction, scope resolution, collision detection across merged files. Built-in recognition via [Builtins-Reference.md](Builtins-Reference.md) (treat unknown names as user/library symbols — do not hard-error). Validation diagnostics: vector member access ∈ {x,y,z} (**SB3001**), comprehension generators only inside vectors (**SB3002**), variable reassignment last-wins (**SB3003**), definition redefinition (**SB3004**). See [Diagnostics.md](Diagnostics.md).
 
 ## Slice 5: Source Loader & Inliner
 
 *(To be fleshed out in Slice 0.5)*
 
-**Rough scope**: Recursive `include`/`use` resolution, cycle detection, dependency ordering, deduplication logic. Implements the `use` private-constant rule ([Spec.md](Spec.md)) and deprecated-construct normalization: `assign`→`let` (**SB5001**), `child`→`children` (**SB5002**), preserve deprecated built-ins (**SB5003**).
+**Rough scope**: Recursive `include`/`use` resolution using the search-path order in [Spec.md](Spec.md) "File Resolution" (file dir → `OPENSCADPATH` → user libs → built-in libs), cycle detection (**SB4001**/**SB4002**), dependency ordering, deduplication. Origin-dependent collision strategy: `include` = last-wins, `use` = namespace/prefix (Spec "Collision-strategy implication"). Implements the `use` private-constant rule, font `use` pass-through, and deprecated-construct normalization: `assign`→`let` (**SB5001**), `child`→`children` (**SB5002**), preserve deprecated built-ins (**SB5003**).
 
 ## Integration Verification Backlog
 
 Behaviors decided in design that must be confirmed against the official OpenSCAD C++ engine (test-only harness, never shipped). Source: [AST-Reference.md](AST-Reference.md) §16.
 
 - **V1** — `child()` ≡ `children(0)` (first child), `child(n)` ≡ `children(n)`. Gates SB5002.
-- **V2** — Whether a `use`d definition can see top-level constants from its own file. Gates the `use` private-constant rule.
+- **V2** *(resolved from source — `ScopeContext.cc`; now a regression guard)* — A `use`d definition sees its own file's constants and the using file cannot override them. Confirms the `use` private-constant + namespace rule.
 - **V3** — `assign(...)` ≡ `let(...)` for binding-preserving rewrite. Gates SB5001.
 
 ## Slice 6: Emitter & CLI

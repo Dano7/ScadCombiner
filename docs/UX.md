@@ -10,7 +10,7 @@ scadbundler bundle <input.scad> [options]
 **Primary Options**:
 - `-o, --output <file>`: Output bundled file (default: input.bundled.scad)
 - `-p, --library-path <paths>`: Additional search paths (comma-separated or multiple flags). Respects OPENSCADPATH env var.
-- `--on-collision <strategy>`: rename|error|keep-first|keep-last (default: rename with suffix)
+- `--on-collision <strategy>`: prefix|error|keep-first|keep-last (default: **origin-dependent** — `keep-last` for `include` collisions to match OpenSCAD's native last-wins, `prefix` for `use`d-library collisions to preserve library isolation; see [Spec.md](Spec.md) "Collision-strategy implication"). An explicit value forces one strategy everywhere.
 - `--preserve-comments`: Keep all comments (default: true)
 - `--bundle-licenses`: Aggregate license headers
 - `--minify`: Remove unnecessary whitespace/comments

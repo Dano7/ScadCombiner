@@ -37,6 +37,25 @@ A list-comprehension generator (`for` / `if` / `let` / `each` in their comprehen
 - **Trigger**: `x = each [1,2];` or `y = for (i=[0:2]) i;` (not wrapped in `[ ]`).
 - **Message**: `'{keyword}' generator is only valid inside a list comprehension '[ ... ]'.`
 
+### SB3003 — Variable reassigned (last-wins) *(Warning, Semantic)*
+- **Trigger**: the same variable is assigned more than once in a scope (including across `include`-merged files).
+- **Message**: `Variable '{name}' was assigned on line {first} but is overwritten; the last assignment wins.`
+- **Notes**: Mirrors OpenSCAD (`parser.y` `handle_assignment`). Variables are **not** sequential — the last assignment wins for the whole scope regardless of where the variable is read. See [Spec.md](Spec.md) "Definition & Variable Collisions".
+
+### SB3004 — Definition redefined (last-wins) *(Warning, Semantic)*
+- **Trigger**: a module or function name is defined more than once in the same (merged) scope.
+- **Message**: `{module|function} '{name}' is redefined; the last definition wins.`
+- **Notes**: OpenSCAD is silent here (`LocalScope.cc` overwrites the lookup entry); we warn. Under `--on-collision rename`/`prefix` the definitions are instead kept and renamed — see Spec collision strategy.
+
+### SB4001 — Include/use file not found *(Warning, Loader)*
+- **Trigger**: a `<path>` cannot be resolved on the search path (Spec "File Resolution").
+- **Message**: `Can't find '{path}' on the search path; statement ignored.`
+
+### SB4002 — Circular include/use detected *(Error, Loader)*
+- **Trigger**: a file appears in its own include/use ancestry.
+- **Message**: `Circular reference: '{path}' is already being processed.`
+- **Notes**: OpenSCAD silently skips the recursive include (`parsersettings.cc` `check_valid` rejects already-open files); we report it. Fixtures: `tests/data/modulecache-tests/circular*` in the OpenSCAD repo.
+
 ### SB5001 — Deprecated `assign` normalized to `let` *(Warning, Inliner)*
 - **Trigger**: an `AssignStatement` in the input.
 - **Action**: rewritten to an equivalent `LetStatement` (bindings preserved verbatim).
@@ -57,7 +76,7 @@ A list-comprehension generator (`for` / `if` / `let` / `each` in their comprehen
 ## To Be Cataloged (later Slice 0.5 work)
 - `SB1xxx`: unterminated string / block comment / `include`/`use` statement, unexpected character. Confirmed from OpenSCAD `lexer.l`: undefined escape sequence (Warning, drops backslash), integer literal "cannot be represented precisely" (Warning), and variable names starting with a digit (Deprecated).
 - `SB2xxx`: expected token, unbalanced brackets, malformed parameter/argument list, illegal modifier placement.
-- `SB3xxx`: duplicate definition in one scope, undefined symbol (where decidable), arity issues (if in scope).
-- `SB4xxx`: file not found on search path, include/use cycle, path escapes allowed roots.
+- `SB3xxx`: undefined symbol (where decidable — conservative, see [Builtins-Reference.md](Builtins-Reference.md)), arity issues (if in scope). *(Duplicate definition/reassignment now seeded as SB3003/SB3004.)*
+- `SB4xxx`: path escapes allowed roots; ambiguous match across library paths. *(File-not-found and cycle now seeded as SB4001/SB4002.)*
 - `SB5xxx`: collision resolution actions (rename applied), dedup actions.
 - `SB6xxx`: emitter-level fidelity warnings (if any).

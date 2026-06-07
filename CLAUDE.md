@@ -60,6 +60,10 @@ The grammar reference docs are in [docs/Grammar-References.md](docs/Grammar-Refe
 - `tree-sitter-openscad` — modern grammar.js
 - [docs/reference/OpenScad/OpenSCAD_User_Manual.pdf](reference/OpenScad/OpenSCAD_User_Manual.pdf) — semantic specification
 
+**Ground-truth source**: the official OpenSCAD C++ source is checked out locally at `C:\git\hub\openscad` (`openscad-2019.05-3933-g6b81cb63e`). Verify semantics there rather than guessing: `src/core/parser.y` (grammar/precedence), `lexer.l` (tokens/numbers/escapes/include-use), `parsersettings.cc` (`find_valid_path` search order), `ScopeContext.cc` (use/include scoping), `LocalScope.cc` (last-wins), `Builtins::init(...)` registrations (built-ins). `examples/` and `tests/data/modulecache-tests/` are ready test fixtures.
+
+Authoritative derived specs: [docs/AST-Reference.md](docs/AST-Reference.md), [docs/Builtins-Reference.md](docs/Builtins-Reference.md), [docs/Diagnostics.md](docs/Diagnostics.md), [docs/Test-Corpus.md](docs/Test-Corpus.md).
+
 ## Development Approach
 
 - Incremental slices, each producing a testable milestone (see [docs/Development-Slices.md](docs/Development-Slices.md))

@@ -22,7 +22,7 @@ This distinction is the correctness core of the bundler.
 - Imports **only** the module and function *definitions* from the file.
 - Does **not** import top-level variable assignments, does **not** execute top-level geometry, and does **not** apply special-variable settings made at the used file's top level.
 - The used file's own `include`/`use` dependencies are pulled in **only** insofar as the imported modules/functions actually require them.
-- **Bundler rule**: when inlining a `use`d file, emit the used module/function definitions **plus** any top-level constant assignments those definitions transitively reference, treated as *private constants* of that library (subject to collision prefixing). Top-level geometry and unreferenced top-level variables are dropped. This preserves the original runtime behavior of the imported definitions. (Subtle free-variable cases are confirmed by integration test **V2** — see [AST-Reference.md](AST-Reference.md) §16.)
+- **Bundler rule**: when inlining a `use`d file, emit the used module/function definitions **plus** any top-level constant assignments those definitions transitively reference, treated as *private constants* of that library (subject to collision prefixing). Top-level geometry and unreferenced top-level variables are dropped. This preserves the original runtime behavior of the imported definitions. (**Source-confirmed**: `ScopeContext.cc` `FileContext::lookup_local_*` evaluates a used callable in a fresh `FileContext` of *its own* file — so it sees its own constants and the using file cannot override them. Regression-guarded by integration test **V2** — see [AST-Reference.md](AST-Reference.md) §16.)
 
 *Example.* Given `lib.scad`:
 ```scad
@@ -33,6 +33,34 @@ cube(99);                 // top-level geometry
 ```
 - `include <lib.scad>` → brings in `$fn=64;`, `WALL=2;`, `box()`, **and** emits `cube(99);`.
 - `use <lib.scad>` → brings in `box()` and (because `box` references it) `WALL=2;` as a private constant. **Drops** `$fn=64;` and `cube(99);`.
+
+## File Resolution (search path & cycles)
+
+Mirror OpenSCAD's `find_valid_path` (`parsersettings.cc`). For a **relative** `<path>` in `include`/`use`, search in order and take the first existing, non-directory match:
+1. The directory of the file **containing the statement**.
+2. Each `OPENSCADPATH` entry, in order.
+3. The user library directory.
+4. The built-in libraries directory.
+
+Absolute paths are used directly. **Cycle guard**: OpenSCAD rejects a path already open in the include chain (it silently skips the recursive include). Not-found → warning (SB4001) and the statement is dropped.
+
+**Bundler**: replicate this order, with `-p`/`OPENSCADPATH` contributing extra paths; implement explicit cycle detection (SB4002) and never infinite-loop. (OpenSCAD test fixtures exist under `tests/data/modulecache-tests/circular*`.)
+
+## Definition & Variable Collisions (last-wins)
+
+From `LocalScope.cc` and `parser.y` `handle_assignment`:
+- **Variables are not sequential.** Within a scope, *all* `x = …` assignments are collected and the **last one wins for the entire scope**, regardless of where `x` is read. OpenSCAD warns on overwrite (*"x was assigned on line N but was overwritten"*, SB3003). The bundler must preserve last-wins when merging files.
+- **Modules/functions**: a later same-name definition silently overwrites the earlier for lookup (last wins; OpenSCAD emits no warning — we add SB3004 as a courtesy). The `moduleoverload` test fixture exercises this.
+
+### Collision-strategy implication (this reframes `--on-collision`)
+- **`include`** merges into one flat scope, so duplicates already collapse to **last-wins** in OpenSCAD. Renaming them would *change* behavior (e.g. a file that deliberately overrides a library module). The correctness-preserving default for include-merged names is therefore **last-wins + warning**; renaming is opt-in.
+- **`use`** keeps each library in its own scope with private constants (see `ScopeContext.cc`). Flattening used libraries into one file **requires namespacing/prefixing** of their top-level constants and any colliding definition names — otherwise a using-file variable could wrongly bind inside a library function. This is a **correctness requirement**, not cosmetic.
+
+> Net: the sensible default is *origin-dependent* — last-wins for `include`, prefix for `use`. [UX.md](UX.md)'s `--on-collision` should reflect this.
+
+## `use` of Fonts
+
+`use <file.ttf>` / `.otf` registers a **font**, not code (`SourceFile::registerUse` special-cases font extensions). A binary font cannot be inlined — preserve such statements **verbatim** and treat them as pass-through dependencies.
 
 ## Deprecated Language Feature Policy ("No Half Measures")
 

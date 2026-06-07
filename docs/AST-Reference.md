@@ -805,7 +805,7 @@ All six former open questions are now **resolved** (see the linked sections for 
 These behaviors are decided above but **must be confirmed** against the reference C++ engine, since the manual is subtle:
 
 - **V1** — `child()` (no args) renders the *first* child, equivalent to `children(0)` (NOT `children()`); `child(n)` ≡ `children(n)`. Validates the SB5002 rewrite.
-- **V2** — Whether a `use`d function/module can see top-level constants defined in *its own* file. Validates the inliner's "preserve private constants" rule.
+- **V2** *(resolved from source — `ScopeContext.cc`)* — A `use`d callable evaluates in a fresh `FileContext` of *its own* file, so it **does** see its own top-level constants, and the using file can neither see nor override them. Confirms the inliner's "preserve private constants + namespace on flatten" rule; the integration test is now a regression guard, not an open question.
 - **V3** — `assign(...)` ≡ `let(...)` for the binding-preserving rewrite (no sequential dependency in `assign`). Validates the SB5001 rewrite.
 
 New genuine open questions should be appended here as they arise.

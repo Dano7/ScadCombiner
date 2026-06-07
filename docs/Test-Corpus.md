@@ -380,17 +380,43 @@ Companion positive: `ok = [each [1, 2, 3]];` → no diagnostics.
   SB5003 INFO 1:1 'import_stl' is deprecated in OpenSCAD; preserved unchanged. Consider migrating to its modern equivalent.
   ```
 
-**B-006 — module name collision across merged files** *(default `--on-collision rename`)*
+**B-006 — definition collision between two `use`d libraries** *(default for `use` = namespace/prefix)*
 - `gear_a.scad` → `module gear() cube(1);`
 - `gear_b.scad` → `module gear() sphere(1);`
 - `main.scad`
   ```scad
-  include <gear_a.scad>
-  include <gear_b.scad>
+  use <gear_a.scad>
+  use <gear_b.scad>
   gear();
   ```
-- **Assertions**: both module bodies survive under distinct names; the surviving `gear()` call binds to the first definition's name; one rename is reported.
-- **Diagnostics**: collision/rename diagnostic — code in `SB5xxx`, **TBD** (see [Diagnostics.md](Diagnostics.md) "To Be Cataloged"). This case is a placeholder until the collision code + default naming scheme are pinned down.
+- **Assertions**: both module bodies are emitted under distinct (namespaced) names; the top-level `gear()` binds to the **last-`use`d** library (gear_b → `sphere`), matching OpenSCAD's use-lookup order (`SourceFile.cc` inserts each `use` at the front of `usedlibs`); a namespacing diagnostic is reported.
+- **Reference output** (illustrative prefix scheme)
+  ```scad
+  module gear_a__gear() cube(1);
+  module gear_b__gear() sphere(1);
+  gear_b__gear();
+  ```
+- **Diagnostics**: collision/namespacing diagnostic — code in `SB5xxx`, **TBD** (collision-resolution codes not yet assigned; see [Diagnostics.md](Diagnostics.md) "To Be Cataloged").
+
+**B-007 — `include` duplicate definitions are last-wins** *(matches OpenSCAD; SB3004)*
+- `a.scad` → `module part() cube(1);`
+- `b.scad` → `module part() sphere(1);`
+- `main.scad`
+  ```scad
+  include <a.scad>
+  include <b.scad>
+  part();
+  ```
+- **Assertions** (default for `include` preserves OpenSCAD semantics = last-wins): `part()` resolves to the **later** definition (b → `sphere`); the earlier is dropped; an SB3004 warning is emitted. (With `--on-collision rename`, both are kept and renamed instead, as in B-006.)
+- **Reference output**
+  ```scad
+  module part() sphere(1);
+  part();
+  ```
+- **Diagnostics**
+  ```
+  SB3004 WARNING b.scad:1:1 module 'part' is redefined; the last definition wins.
+  ```
 
 ---
 
@@ -422,6 +448,8 @@ Each locked decision maps to at least one binding case and, where behavioral, an
 | blank-line via `BlankLineBefore` (AST §15.7) | P-003 | — |
 | numbers are `double` + `RawText`, incl. hex (AST §15.9) | L-001, L-004, P-002 | — |
 | operator precedence/associativity (Parser-Planning, from `parser.y`) | E-001–E-008 | — |
+| file resolution order + cycle detection (Spec, from `parsersettings.cc`) | B-001/B-002; modulecache fixtures | — |
+| include = last-wins, use = namespace (Spec, from `LocalScope`/`ScopeContext`) | B-006, B-007 | V2 |
 
 ---
 
@@ -436,6 +464,7 @@ Each locked decision maps to at least one binding case and, where behavioral, an
 - [ ] Bundle: cycle detection, search-path/`OPENSCADPATH`, dedup (identical module hashing), all `--on-collision` strategies, license aggregation
 - [ ] Emitter: brace style, line-length wrapping, `--minify`, license header block
 - [ ] Real-world golden masters: small slices of BOSL2 / NopSCADlib / dotSCAD
+- [ ] Adopt OpenSCAD `tests/data/modulecache-tests` (cycles, use/include, overload) + `examples/` (~50 valid files) as parser + integration fixtures
 - [ ] Integration harness wired for V1–V3
 
 ---
