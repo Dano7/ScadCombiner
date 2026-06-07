@@ -24,7 +24,7 @@
 13. [Visitor Pattern](#13-visitor-pattern)
 14. [Worked Examples](#14-worked-examples)
 15. [Design Decisions & Rationale](#15-design-decisions--rationale)
-16. [Open Questions](#16-open-questions)
+16. [Resolved Decisions & Verification](#16-resolved-decisions--required-verification)
 17. [Suggested File Layout](#17-suggested-file-layout)
 
 ---
@@ -33,8 +33,8 @@
 
 - **Immutable records.** Every node is a C# `record` (or `readonly record struct` for value-like helpers). Transformations produce new trees via `with` expressions; nodes are never mutated.
 - **Closed hierarchy.** All node types live in the core library and derive from `AstNode`. The base types (`Statement`, `Expression`) are `abstract record`; concrete leaf nodes are `sealed record`. This makes the set of nodes knowable for exhaustive `switch` and visitor generation.
-- **Parse-only tree.** The AST captures *syntax*. It does **not** carry resolved symbols, resolved include paths, types, or dedup decisions. Those live in side tables produced by later passes (semantic analyzer, source loader, inliner), keyed by node identity or `SourceSpan`. This keeps the AST pure and reusable.
-- **Round-trip fidelity.** Nodes retain enough raw information (raw number text, raw string text, explicit parentheses, comment trivia) that the emitter can reproduce author intent. Pretty-printing style is the emitter's job; *preserving meaning and Customizer/license comments* is the AST's job.
+- **Parse-only tree.** The AST captures *syntax*. It does **not** carry resolved symbols, resolved include paths, types, or dedup decisions. Those live in side tables produced by later passes (semantic analyzer, source loader, inliner), keyed by **reference identity** via `Dictionary<AstNode, T>(ReferenceEqualityComparer.Instance)` (or `ConditionalWeakTable`) — never by value. Records keep value equality for tests; side tables use reference identity so structurally-identical, `with`-rewritten, or synthesized nodes never collide. This keeps the AST pure and reusable.
+- **Round-trip fidelity.** Nodes retain enough raw information (raw number text, raw string text, explicit parentheses, comment trivia, and a `BlankLineBefore` marker) that the emitter can reproduce author intent. Pretty-printing style is the emitter's job; *preserving meaning and Customizer/license comments* is the AST's job.
 - **Source provenance on every node.** Every node knows its `SourceSpan`, which includes the originating `SourceFile`. After inlining, nodes from many files coexist in one tree; provenance must survive.
 
 ---
@@ -54,7 +54,25 @@ public readonly record struct SourcePosition(int Offset, int Line, int Column);
 public readonly record struct SourceSpan(SourceFile File, SourcePosition Start, SourcePosition End);
 ```
 
-> **Note**: A span never crosses files. A node synthesized by a transform (not present in any source) uses the span of the node it was derived from, or a sentinel; see [Open Questions](#16-open-questions).
+A span never crosses files. Two well-known sentinels handle synthesized content:
+
+```csharp
+public sealed record SourceFile(string Path, string Text)
+{
+    /// Sentinel file for nodes created by transforms with no real origin
+    /// (e.g. a bundler-generated header). Path = "<synthesized>", Text = "".
+    public static readonly SourceFile Synthesized = new("<synthesized>", "");
+}
+
+public readonly record struct SourceSpan(SourceFile File, SourcePosition Start, SourcePosition End)
+{
+    /// Span for synthesized nodes that have no origin node to borrow from.
+    public static readonly SourceSpan Synthetic =
+        new(SourceFile.Synthesized, default, default);
+}
+```
+
+> **Provenance rule** (resolves former Open Question 1): a node created by a transform reuses the `SourceSpan` of the **origin node** it was derived from (so diagnostics point at the real source — e.g. a renamed module points back at the original `module`). Use `SourceSpan.Synthetic` only when there is genuinely no origin. `Span` is therefore always non-null.
 
 ---
 
@@ -67,13 +85,19 @@ public abstract record AstNode
     /// The source range this node covers. Set via init at construction.
     public required SourceSpan Span { get; init; }
 
-    /// Comments/whitespace attached before this node (e.g. a Customizer label
+    /// Comments attached before this node (e.g. a Customizer label
     /// line, a license header, a section banner). Empty when none.
     public IReadOnlyList<Trivia> LeadingTrivia { get; init; } = [];
 
     /// Comments attached after this node on the same line
     /// (e.g. a Customizer inline annotation `// [0:100]`). Empty when none.
     public IReadOnlyList<Trivia> TrailingTrivia { get; init; } = [];
+
+    /// True when one or more blank lines preceded this node in the source.
+    /// The emitter renders exactly one blank line before the node when set
+    /// (honored primarily at statement boundaries; ignored by --minify).
+    /// Replaces a dedicated WhitespaceTrivia node — see §15.7.
+    public bool BlankLineBefore { get; init; }
 }
 ```
 
@@ -82,7 +106,7 @@ public abstract record AstNode
 
 ### Trivia
 
-Trivia is non-semantic source text (comments, significant whitespace) that the parser attaches to the nearest node so the emitter can reproduce it. Trivia is **not** visited as part of the main tree walk.
+Trivia is non-semantic source text (comments) that the parser attaches to the nearest node so the emitter can reproduce it. Trivia is **not** visited as part of the main tree walk. Blank lines are *not* trivia — they are captured by `AstNode.BlankLineBefore` (§3 base node, §15.7).
 
 ```csharp
 public abstract record Trivia
@@ -93,10 +117,6 @@ public abstract record Trivia
 /// A comment. Text is the full raw comment INCLUDING delimiters
 /// (`// ...` or `/* ... */`), so it can be re-emitted verbatim.
 public sealed record CommentTrivia(string Text, CommentKind Kind) : Trivia;
-
-/// Captured run of whitespace, used only to preserve blank lines between
-/// statements. The emitter may collapse or honor this per its style config.
-public sealed record WhitespaceTrivia(string Text) : Trivia;
 ```
 
 See [§11 Customizer Representation](#11-customizer-representation) for how Customizer metadata is recovered from `CommentTrivia`.
@@ -227,8 +247,11 @@ public sealed record LetStatement(
 /// A lone `;`. Retained for fidelity; the emitter MAY elide it.
 public sealed record EmptyStatement() : Statement;
 
-/// Deprecated `assign(Bindings) Body`. Supported for legacy input; the inliner
-/// SHOULD rewrite to `let` on output. (Deferred to a later slice — see Open Questions.)
+/// Deprecated `assign(Bindings) Body`. FULLY SUPPORTED: parsed faithfully here,
+/// then normalized to LetStatement by the inliner (Slice 5) with warning SB5001.
+/// `assign` evaluates all RHS in the OUTER scope and forbids sibling references,
+/// so a direct binding-preserving rewrite to `let` is semantically equivalent
+/// (verified by integration test V3). See Spec.md "Deprecated Language Feature Policy".
 public sealed record AssignStatement(
     IReadOnlyList<Binding> Bindings,
     Statement Body
@@ -319,7 +342,10 @@ public sealed record ParenthesizedExpression(Expression Inner) : Expression;
 /// `Target[Index]`
 public sealed record IndexExpression(Expression Target, Expression Index) : Expression;
 
-/// `Target.Member` — Member is "x", "y", or "z".
+/// `Target.Member` — Member is exactly one of "x", "y", "z" (sugar for [0]/[1]/[2]).
+/// Kept as `string` (not an enum) so the parser accepts any `.ident` and the
+/// semantic pass emits a precise, recoverable diagnostic SB3001 for anything
+/// outside {x, y, z}. See §15.11.
 public sealed record MemberExpression(Expression Target, string Member) : Expression;
 
 /// `Callee(Arguments)`. Callee is usually an Identifier, but may be any
@@ -507,9 +533,9 @@ Every concrete node, grouped. This list is exhaustive — it doubles as the set 
 
 **Supporting (3):** `Parameter`, `Argument`, `Binding`
 
-**Trivia (2):** `CommentTrivia`, `WhitespaceTrivia`
+**Trivia (1):** `CommentTrivia`
 
-> Total concrete node types: **41** (1 root + 13 statements + 22 expressions + 3 supporting + 2 trivia). The four comprehension generators are counted among expressions.
+> Total concrete node types: **40** (1 root + 13 statements + 22 expressions + 3 supporting + 1 trivia). The four comprehension generators are counted among expressions.
 
 ---
 
@@ -735,22 +761,37 @@ These choices are fixed for cross-implementation consistency (one of the AI-comp
 3. **`echo`/`assert`/`children` as statements ARE `ModuleInstantiation`s** (no dedicated nodes). They behave like ordinary module calls at statement level; their *expression* forms (`echo(...) x`, `assert(...) x`) get dedicated nodes because they wrap a value.
 4. **Raw text retained on numbers and strings.** Preserves `1.0` vs `1`, scientific notation, and exact escapes — required for faithful round-tripping and to avoid surprising diffs in bundled output.
 5. **`ParenthesizedExpression` is kept** rather than re-derived from precedence. Preserves author intent (a stated value) and lets the emitter avoid a class of precedence bugs. The emitter still inserts parentheses where a transform makes them necessary.
-6. **AST is parse-only; resolution lives in side tables.** Include resolution, symbol binding, and dedup decisions are pass outputs keyed by node, not fields on nodes. Keeps the tree immutable, cacheable, and reusable across the CLI and the future Live web service.
-7. **Trivia carries comments; the emitter owns formatting.** Only comments (incl. Customizer/license) and optional blank-line markers are preserved structurally. Indentation/brace style is regenerated by the emitter per its config — this is why we are a *bundler*, not a formatter.
+6. **AST is parse-only; resolution lives in reference-keyed side tables.** Include resolution, symbol binding, and dedup decisions are pass outputs stored in `Dictionary<AstNode, T>(ReferenceEqualityComparer.Instance)` (or `ConditionalWeakTable`), never as fields on nodes. Records keep value equality for tests; side tables use *reference* identity, so structurally-identical, `with`-rewritten, or synthesized nodes never collide. Synthetic nodes carry their origin node's `SourceSpan` for diagnostics, or `SourceSpan.Synthetic` when there is no origin.
+7. **Comments are trivia; blank lines are a flag; the emitter owns the rest.** Comments (incl. Customizer/license) ride on `LeadingTrivia`/`TrailingTrivia`; a single `AstNode.BlankLineBefore` bool preserves intentional section breaks. All other formatting (indentation, brace style, wrapping) is regenerated by the emitter per its config — this is why we are a *bundler*, not a formatter. (Chosen over a `WhitespaceTrivia` node: leaner, and captures the only whitespace intent that matters.)
 8. **`Binding` vs `AssignmentStatement` are distinct types** despite identical shape, because they occupy different grammatical positions (let/for binding vs. statement) and visitors/analyzers treat them differently.
+9. **Numbers are `double`.** OpenSCAD has no integer type — every number is an IEEE-754 double — so `double` reproduces its exact arithmetic and precision limits. Emit fidelity (`1` vs `1.0` vs `1e3`) comes from `RawText`, not the numeric type.
+10. **Deprecated constructs are handled, not ignored ("No Half Measures").** Pure syntax/scope deprecations with exact modern equivalents are auto-normalized with a warning (`assign`→`let`; `child()`→`children(0)`; `child(n)`→`children(n)`). Deprecated *built-in calls* whose rewrite could alter geometry or file I/O (`import_stl`, `import_dxf`, `import_off`, `dxf_linear_extrude`, `dxf_rotate_extrude`) are preserved verbatim with an info diagnostic — the bundler combines, it does not refactor behavior. Full policy in [Spec.md](Spec.md); codes in [Diagnostics.md](Diagnostics.md).
+11. **Member access is validated, not enum-typed.** `MemberExpression.Member` stays `string` so the parser accepts any `.ident` and the semantic pass emits a precise, recoverable diagnostic (SB3001) for anything outside {x, y, z} — better UX than a hard parse failure.
 
 ---
 
-## 16. Open Questions
+## 16. Resolved Decisions & Required Verification
 
-Resolve these during Slice 1–3 implementation; each needs a decision recorded back here.
+All six former open questions are now **resolved** (see the linked sections for detail):
 
-1. **Synthetic-node spans.** What `SourceSpan` do nodes created by transforms (e.g. a renamed identifier, an `assign`→`let` rewrite) carry? Options: span of the origin node; a dedicated `SourceFile.Synthetic` sentinel; nullable span. *Leaning:* reuse origin span + a separate "synthesized" side-table flag, to keep `Span` non-null.
-2. **Blank-line fidelity.** Is `WhitespaceTrivia` actually needed, or is "preserve at most one blank line between top-level statements" a sufficient emitter rule with no trivia? *Leaning:* emitter rule; drop `WhitespaceTrivia` if Slice 6 confirms it's unnecessary.
-3. **`assign` support.** Implement `AssignStatement` now or reject deprecated `assign` with a diagnostic and a suggested `let` rewrite? *Leaning:* parse it, warn, rewrite on emit — but may defer past v1.
-4. **`use` of a file's special variables / top-level `$fn`.** Confirm `use` excludes top-level assignments including special-variable defaults (manual is subtle here). Affects the inliner more than the AST, but worth a parser test.
-5. **Number representation.** Is `double` sufficient, or do we need to preserve integer-ness for emit? `RawText` covers emit fidelity, so `double` should suffice — confirm against BOSL2 corpus.
-6. **Member access surface.** Confirm `.x/.y/.z` is the complete set (no arbitrary `.member`). If arbitrary, `MemberExpression.Member` stays `string` (already does); if fixed, add validation in the semantic pass.
+| # | Question | Resolution | Where |
+|---|---|---|---|
+| 1 | Synthetic-node spans | Reuse origin node's span; `SourceSpan.Synthetic` sentinel only when no origin. Reference-equality side tables prevent collisions. | §2, §15.6 |
+| 2 | Blank-line fidelity | `WhitespaceTrivia` dropped; replaced by `AstNode.BlankLineBefore` bool. | §3, §15.7 |
+| 3 | `assign` (and `child`) | Fully supported & normalized: `assign`→`let` (SB5001), `child()`→`children(0)` / `child(n)`→`children(n)` (SB5002). | §5, [Spec.md], [Diagnostics.md] |
+| 4 | `use` semantics | Specified precisely; bundler preserves used-file private constants, drops top-level geometry/vars. | [Spec.md] |
+| 5 | Number representation | `double` — OpenSCAD has no integer type; `RawText` preserves emit form. Closed. | §15.9 |
+| 6 | Member access surface | Set is exactly {x, y, z}; `Member` stays `string` + semantic validation (SB3001). | §6, §15.11 |
+
+### Required verification (integration tests vs. official OpenSCAD — test-only harness)
+
+These behaviors are decided above but **must be confirmed** against the reference C++ engine, since the manual is subtle:
+
+- **V1** — `child()` (no args) renders the *first* child, equivalent to `children(0)` (NOT `children()`); `child(n)` ≡ `children(n)`. Validates the SB5002 rewrite.
+- **V2** — Whether a `use`d function/module can see top-level constants defined in *its own* file. Validates the inliner's "preserve private constants" rule.
+- **V3** — `assign(...)` ≡ `let(...)` for the binding-preserving rewrite (no sequential dependency in `assign`). Validates the SB5001 rewrite.
+
+New genuine open questions should be appended here as they arise.
 
 ---
 
@@ -761,7 +802,7 @@ For the core library (`src/ScadBundler.Core/Ast/`), to aid the one-shot implemen
 ```
 Ast/
   SourceFile.cs            // SourceFile, SourcePosition, SourceSpan
-  Trivia.cs                // Trivia, CommentTrivia, WhitespaceTrivia, CommentKind
+  Trivia.cs                // Trivia, CommentTrivia, CommentKind
   AstNode.cs               // AstNode base + Accept
   ScadFile.cs              // root
   Statements.cs            // all Statement records

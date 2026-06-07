@@ -21,8 +21,9 @@ scadbundler bundle <input.scad> [options]
 ## Expected Behavior
 - Smart resolution of `include` and `use` with cycle detection.
 - Clear progress and summary output.
-- Excellent error messages with context.
+- Excellent error messages with context (coded diagnostics — see [Diagnostics.md](Diagnostics.md)).
 - Preserves Customizer parameter comments for platform compatibility.
+- Normalizes deprecated constructs to modern equivalents with a warning (`assign`→`let`, `child`→`children`); preserves deprecated built-ins (e.g. `import_stl`) with an informational note.
 
 ## C# & OpenSCAD Community Alignment
 - NuGet package + `dotnet tool` support.

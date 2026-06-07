@@ -19,19 +19,19 @@ Build **incrementally, test-driven**, with AI assistance. Grammar references wil
 
 **Exit Criteria for Slice 0.5**:
 - [ ] Each slice has a precise, testable acceptance checklist (not vague goals).
-- [ ] AST node hierarchy is fully specified: record names, field names, field types, nullable/optional annotations.
+- [x] AST node hierarchy is fully specified: record names, field names, field types, nullable/optional annotations. → [AST-Reference.md](AST-Reference.md)
 - [ ] Grammar coverage per slice is explicitly listed — which production rules are implemented in which slice.
 - [ ] Error/diagnostic catalog: every user-visible error has a code (e.g. `SB-001`), message template, and triggering condition.
 - [ ] Golden test cases: each slice has ≥3 input→expected-output (or input→expected-diagnostic) examples, covering the happy path and at least one error path.
 - [ ] All docs are internally consistent (no contradictions between Constitution, Spec, Design, UX, and slice plans).
 - [ ] Slice boundaries are unambiguous — no feature straddles two slices without a clear cut point.
-- [ ] `include` vs `use` semantics are precisely specified with examples in Spec.md.
+- [x] `include` vs `use` semantics are precisely specified with examples in Spec.md.
 - [ ] Collision resolution strategies are fully specified with examples.
 
 **Deliverables**:
 - Updated/expanded versions of: `Spec.md`, `Design.md`, `Parser-Planning.md`, `Development-Slices.md`
-- New doc: `AST-Reference.md` — complete node hierarchy with field-level detail
-- New doc: `Diagnostics.md` — error/warning catalog with codes, messages, examples
+- New doc: `AST-Reference.md` — complete node hierarchy with field-level detail ✓ **(done)**
+- New doc: `Diagnostics.md` — error/warning catalog with codes, messages, examples ◐ **(seeded; expand per-slice)**
 - New doc: `Test-Corpus.md` — golden test cases organized by slice
 
 ## Slice 1: Project Setup & Lexer
@@ -56,13 +56,21 @@ Build **incrementally, test-driven**, with AI assistance. Grammar references wil
 
 *(To be fleshed out in Slice 0.5)*
 
-**Rough scope**: Symbol table construction, scope resolution, collision detection across merged files.
+**Rough scope**: Symbol table construction, scope resolution, collision detection across merged files. Validation diagnostics: vector member access ∈ {x,y,z} (**SB3001**), comprehension generators only inside vectors (**SB3002**). See [Diagnostics.md](Diagnostics.md).
 
 ## Slice 5: Source Loader & Inliner
 
 *(To be fleshed out in Slice 0.5)*
 
-**Rough scope**: Recursive `include`/`use` resolution, cycle detection, dependency ordering, deduplication logic.
+**Rough scope**: Recursive `include`/`use` resolution, cycle detection, dependency ordering, deduplication logic. Implements the `use` private-constant rule ([Spec.md](Spec.md)) and deprecated-construct normalization: `assign`→`let` (**SB5001**), `child`→`children` (**SB5002**), preserve deprecated built-ins (**SB5003**).
+
+## Integration Verification Backlog
+
+Behaviors decided in design that must be confirmed against the official OpenSCAD C++ engine (test-only harness, never shipped). Source: [AST-Reference.md](AST-Reference.md) §16.
+
+- **V1** — `child()` ≡ `children(0)` (first child), `child(n)` ≡ `children(n)`. Gates SB5002.
+- **V2** — Whether a `use`d definition can see top-level constants from its own file. Gates the `use` private-constant rule.
+- **V3** — `assign(...)` ≡ `let(...)` for binding-preserving rewrite. Gates SB5001.
 
 ## Slice 6: Emitter & CLI
 
