@@ -1,0 +1,7 @@
+# Custom Dictionary Words
+concatenator
+Customizer
+Thingiverse
+ANTLR
+ScadCombiner
+OpenSCAD
