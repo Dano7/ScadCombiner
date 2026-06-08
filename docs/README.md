@@ -12,4 +12,6 @@ dotnet tool install --global ScadBundler
 scadbundler bundle myproject.scad -o bundled.scad
 ```
 
-See [Constitution.md](Constitution.md), [Design.md](Design.md), [Spec.md](Spec.md), and [UX.md](UX.md) for project philosophy.
+## Documentation
+
+Start with **[Design.md](Design.md)** — architecture overview + the full document map. Key references: [Constitution.md](Constitution.md) (principles), [Spec.md](Spec.md) (semantics), [AST-Reference.md](AST-Reference.md), [Parser-Planning.md](Parser-Planning.md) (precedence), [Diagnostics.md](Diagnostics.md), [Builtins-Reference.md](Builtins-Reference.md), [Test-Corpus.md](Test-Corpus.md), [UX.md](UX.md). Implementation plan + per-slice specs: [Development-Slices.md](Development-Slices.md) → [slices/](slices/).

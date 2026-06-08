@@ -209,7 +209,7 @@ Opening `"` starts a string. Inside:
 
 ### 7.5 Identifiers & keywords
 - Identifier: `[A-Za-z_$][A-Za-z0-9_]*`. The leading `$` is included (special variables like `$fn` are `Identifier`s — AST-Reference §6).
-- Digit-leading identifier `[0-9][A-Za-z0-9_]*` (e.g. `2d`) → `Identifier` + **SB1008** (Deprecated/Warning). (Only reached when the number rules don't match the whole lexeme; longest-match makes `2d` an identifier.)
+- Digit-leading identifier `[0-9][A-Za-z0-9_]*` (e.g. `2d`) → `Identifier` + **SB1008** (Warning — deprecation). (Only reached when the number rules don't match the whole lexeme; longest-match makes `2d` an identifier.)
 - After scanning an identifier, if the text equals a keyword in the §6 set, emit that keyword kind instead (`true`/`false`/`undef` → `True`/`False`/`Undef`).
 
 ### 7.6 `include` / `use` and FILEPATH (contextual)
