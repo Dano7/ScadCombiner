@@ -35,4 +35,27 @@ public static class DiagnosticCode
 
     /// <summary>Newline inside an <c>include</c>/<c>use</c> path.</summary>
     public const string NewlineInIncludePath = "SB1009";
+
+    // Parser (SB2xxx)
+
+    /// <summary>A specific expected token is missing.</summary>
+    public const string ExpectedToken = "SB2001";
+
+    /// <summary>A token is valid nowhere here, or input ended unexpectedly.</summary>
+    public const string UnexpectedToken = "SB2002";
+
+    /// <summary>An opening <c>(</c>/<c>[</c>/<c>{</c> has no matching close.</summary>
+    public const string UnclosedDelimiter = "SB2003";
+
+    /// <summary>A statement or definition is not terminated by <c>;</c>.</summary>
+    public const string MissingSemicolon = "SB2004";
+
+    /// <summary>An expression was expected but none was found.</summary>
+    public const string ExpectedExpression = "SB2005";
+
+    /// <summary>A parameter list is malformed.</summary>
+    public const string InvalidParameterList = "SB2006";
+
+    /// <summary>An argument list is malformed.</summary>
+    public const string InvalidArgumentList = "SB2007";
 }

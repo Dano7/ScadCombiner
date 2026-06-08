@@ -66,7 +66,14 @@ tests/
 **Tokens** (`expected.tokens`) — one per line, `<Kind> <line>:<col> <lexeme>` where `<Kind>` is the `TokenKind` enum member name and `<line>:<col>` is the token span's start (1-based). The `Eof` line has no lexeme. The **authoritative** `TokenKind` set is the enum **finalized in [Slice-1-Lexer.md](slices/Slice-1-Lexer.md) §6** — the `L-` cases below use those exact names (e.g. `Identifier`, `Assign`, `Semicolon`, `Eof`).
 > Note: `*` and `%` lex as `Star`/`Percent`; whether they mean operator or modifier is the parser's call by position. Special variables (`$fn`, …) lex as `Identifier` with the `$` included.
 
-**AST** (`expected.ast`) — shown in this doc using the readable notation from [AST-Reference.md](AST-Reference.md) §14 (`NodeName { field = value }`). The on-disk canonical serialization format is finalized in Slice 2 (built alongside the parser); it must be deterministic and isomorphic to this notation. `Span`/trivia omitted unless under test.
+**AST** (`expected.ast`) — shown in this doc using the readable notation from [AST-Reference.md](AST-Reference.md) §14 (`NodeName { field = value }`). The on-disk canonical serialization format is **finalized in Slice 2** (built alongside the parser, rendered by the test harness's `AstDump`). It is a deterministic indented tree isomorphic to the §14 notation:
+
+- One node per line; **two-space** indentation per depth. The root (`ScadFile`) is at depth 0 and its statements at depth 1 (no `Statements:` label on the root).
+- The node header is its type name plus scalar fields inline: strings quoted and escaped (`Name="cube"`, `RawText="0xFF"`), doubles invariant (`Value=255`), enums by name (`Operator=Add`), and modifier lists as `Modifiers=[Highlight, Background]` (omitted when empty). `BlankLineBefore=true` is appended only when set; spans and comment trivia are omitted.
+- A single child-node field is rendered on its own line as `FieldName: <child header>` with the child's own children indented one level deeper (`Left:`, `Body:`, `Condition:`, `Start:`, …). A **nullable** structural child renders `FieldName: null` when absent (`Child:`, `Else:`, `Step:`); an *optional* child (`Parameter.DefaultValue`, `assert`/`echo` `Body`) is omitted entirely when absent.
+- A list field renders `FieldName:` followed by its elements indented one level (unlabeled), or `FieldName: []` when empty (`Arguments:`, `Parameters:`, `Bindings:`, `Elements:`, `Statements:`).
+
+Worked goldens live under `tests/Corpus/slice2-parser/<id>/expected.ast`; the harness regenerates them with `BLESS_AST=1`. `Span`/trivia are omitted unless a case is specifically under test (trivia/blank-line are covered by inline unit tests, with `BlankLineBefore` also surfaced in the dump — see P-003).
 
 **Diagnostics** (`expected.diag`) — one per line, sorted by position, exact message from [Diagnostics.md](Diagnostics.md):
 ```

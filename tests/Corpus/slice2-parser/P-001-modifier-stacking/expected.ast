@@ -1,0 +1,6 @@
+ScadFile
+  ModuleInstantiation Name="cube" Modifiers=[Highlight, Background]
+    Arguments:
+      Argument
+        Value: NumberLiteral Value=1 RawText="1"
+    Child: null

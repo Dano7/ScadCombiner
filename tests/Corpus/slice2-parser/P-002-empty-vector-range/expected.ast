@@ -1,0 +1,9 @@
+ScadFile
+  AssignmentStatement Name="a"
+    Value: VectorExpression
+      Elements: []
+  AssignmentStatement Name="r"
+    Value: RangeExpression
+      Start: NumberLiteral Value=0 RawText="0"
+      Step: NumberLiteral Value=2 RawText="2"
+      End: NumberLiteral Value=10 RawText="10"

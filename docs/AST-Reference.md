@@ -82,8 +82,12 @@ public readonly record struct SourceSpan(SourceFile File, SourcePosition Start, 
 /// Base of all AST nodes.
 public abstract record AstNode
 {
-    /// The source range this node covers. Set via init at construction.
-    public required SourceSpan Span { get; init; }
+    /// The source range this node covers. Defaults to SourceSpan.Synthetic so a node can be
+    /// constructed and then have its real span attached via a `with` expression (the parser's
+    /// build-then-attach pattern); it is never null. (Slice 2 chose a defaulted property over
+    /// `required` to keep span/trivia attachment in one place; the "always non-null" guarantee
+    /// of §2 is preserved by the non-null Synthetic default.)
+    public SourceSpan Span { get; init; } = SourceSpan.Synthetic;
 
     /// Comments attached before this node (e.g. a Customizer label
     /// line, a license header, a section banner). Empty when none.

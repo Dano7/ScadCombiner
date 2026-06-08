@@ -1,0 +1,5 @@
+ScadFile
+  AssignmentStatement Name="a"
+    Value: NumberLiteral Value=1 RawText="1"
+  AssignmentStatement Name="b" BlankLineBefore=true
+    Value: NumberLiteral Value=2 RawText="2"
