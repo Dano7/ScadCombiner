@@ -1,2 +1,14 @@
-# Auto detect text files and perform LF normalization
-* text=auto
+# Normalize all text files to LF in both the repository and the working tree.
+# Using eol=lf (rather than a bare `text=auto`) keeps the working copy LF on
+# Windows too, which avoids the "LF will be replaced by CRLF" churn warnings.
+* text=auto eol=lf
+
+# Known binary types: never normalize line endings.
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.pdf  binary
+*.zip  binary
+*.stl  binary
+*.dll  binary

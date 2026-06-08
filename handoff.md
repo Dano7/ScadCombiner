@@ -1,80 +1,95 @@
-# Handoff — Start Here (Slice 1 Implementation)
+# Handoff — Start Here (Slice 2: AST + Parser)
 
-> **✅ Slice 1 is complete** (lexer implemented; `dotnet build` zero-warning, `dotnet test` green, `Lexing/` line coverage ≈98%). The notes below are retained as the record of how Slice 1 was approached. **If you are starting a new session, your job is Slice 2** — read [docs/slices/Slice-2-Parser.md](docs/slices/Slice-2-Parser.md) and build the AST + recursive-descent parser on top of `LexResult.Tokens`. Two small spec clarifications were folded back during Slice 1: the `\x00`→space / invalid-`\u`→`U+FFFD` decoding notes in Slice-1 §7.4, the raw (untrimmed) FILEPATH text in §7.6, and the Test-Corpus `L-` cases now use the final `TokenKind` names.
+You are picking up **ScadBundler**, an AST-based OpenSCAD file bundler (C# / .NET 10, distributed as a `dotnet tool`). **Slice 1 (project setup + lexer) is complete and committed.** Your job this session is **Slice 2 — the AST hierarchy + recursive-descent statement/expression parser.**
 
-You are picking up **ScadBundler**, an AST-based OpenSCAD file bundler (C# / .NET 10, distributed as a `dotnet tool`). The documentation phase is done; you're starting the **first implementation slice**.
+---
 
-## Current state (read this first)
+## 🔴 DO THIS FIRST: cold code review of Slice 1
 
-- **Slice 0.5 (documentation) is complete.** All six implementation slices are fully specified under `docs/slices/`, and the cross-cutting reference docs are locked and mutually consistent.
-- **There is no implementation code yet.** The repo is docs-only. You are creating the solution from scratch.
-- **Your job this session: implement Slice 1 — project setup + the lexer.**
-- The project's whole point is *one-shot, spec-driven implementation*. The spec is meant to be enough. If you find a genuine gap/ambiguity, fix the spec too (don't silently improvise).
+**Before writing any Slice 2 code, do a fresh, critical review of the Slice 1 implementation.** You did not write it this session — read it as a reviewer would. Slice 2 builds directly on the lexer's token stream, so any latent lexer bug becomes a parser bug. Review goals:
+
+- **Correctness vs ground truth.** Re-check `src/ScadBundler.Core/Lexing/Lexer.cs` against OpenSCAD `C:\git\hub\openscad\src\core\lexer.l` — numbers (hex/fraction/scientific + maximal munch), string escapes, contextual `include`/`use`, the trivia/`BlankLineBefore` model, and SB1001–SB1009 recovery.
+- **Token contract you're about to consume.** Make sure you actually understand `LexResult`, `Token`, and the trivia attachment rules (below) before designing the parser around them.
+- **Smells / cleanups.** Dead code, off-by-one in spans, naming, anything that will be awkward for the parser. Fix small issues in a separate tidy commit *before* starting Slice 2 so the parser work stays clean.
+- **Tests.** Skim the 6 test files under `tests/ScadBundler.Core.Tests/Lexing/` + `TestSupport/`. Confirm the corpus harness (`CorpusLocator`, `LexDump`) is something you can reuse/extend for the AST golden format.
+
+Optional: run `/code-review` on the Slice 1 commit, or just read it. Record anything non-trivial you find. **Then** proceed to Slice 2.
+
+---
+
+## Current state
+
+- **Slice 1 done:** `dotnet build` is zero-warning (warnings-as-errors), `dotnet test` is green (90 tests), `Lexing/` line coverage ≈98%.
+- Branch is **`Claude_implementation`** (not `main`). Last commit: `feat(lexer): implement Slice 1 …`.
+- What exists in `src/ScadBundler.Core/`: `Text/` (SourceFile, SourcePosition, SourceSpan + sentinels), `Trivia/` (Trivia, CommentTrivia, CommentKind), `Diagnostics/` (Diagnostic, DiagnosticSeverity, DiagnosticCode, DiagnosticBag), `Lexing/` (TokenKind, Token, LexResult, Lexer). **`Ast/` and `Parsing/` do not exist yet — you create them.**
 
 ## What to read, in order
 
-1. **`docs/slices/Slice-1-Lexer.md`** — your primary spec. Exit criteria, project layout, public API, lexing rules, diagnostics, test plan. Implement to this.
-2. **`docs/AST-Reference.md` §2–§3** — the foundational types you create in Slice 1: `SourceFile`, `SourcePosition`, `SourceSpan` (+ `Synthetic` sentinels), `Trivia`/`CommentTrivia`/`CommentKind`, and the trivia/`BlankLineBefore` model. (§17 has the full Core file layout.)
-3. **`docs/Diagnostics.md`** — the `SBnnnn` scheme; you implement the lexer codes **SB1001–SB1009**.
-4. **`docs/Test-Corpus.md` §Slice 1** — golden cases `L-001`..`L-004` plus the §4 notation conventions; turn the §10 test plan into xUnit tests.
-5. **`docs/Constitution.md`** — the non-negotiables (below).
+1. **`docs/slices/Slice-2-Parser.md`** — your primary spec (exit criteria, deliverables, statement grammar §6, core-expression grammar §7, params/args §8, trivia propagation §9, diagnostics §10, test plan §11).
+2. **`docs/AST-Reference.md`** — authoritative node definitions. You implement **all 40 records** + `IAstVisitor<TResult>` + `AstNode.Accept` now (§3–§9, §12, §13, §17). The comprehension/functional records (ForComprehension, …, LetExpression, AssertExpression, EchoExpression, FunctionLiteral) are **defined now but only parsed in Slice 3**.
+3. **`docs/Parser-Planning.md`** — the authoritative operator precedence / binding-power table (translated from `parser.y`). Drive precedence climbing from it. Pin the gotchas: `^` is right-assoc and binds tighter than unary minus; ternary right-assoc; `&` tighter than `|`, both looser than `+`.
+4. **`docs/Test-Corpus.md`** — Slice 2 cases `P-001`..`P-003` and expression cases `E-001`..`E-008` (E-009..E-012 are Slice 3). §4 says the on-disk **AST golden format (`expected.ast`) is finalized in Slice 2** — you design a deterministic serialization isomorphic to the §14 notation.
+5. **`docs/Diagnostics.md`** — you implement parser codes **SB2001–SB2007** (already cataloged).
+6. Ground truth: OpenSCAD `C:\git\hub\openscad\src\core\parser.y` (grammar/precedence). Verify, don't guess.
 
-## Ground truth (don't guess OpenSCAD behavior)
+## How to consume the lexer (the Slice 1 → Slice 2 seam)
 
-The official OpenSCAD C++ source is checked out locally at **`C:\git\hub\openscad`** (`openscad-2019.05-3933-g6b81cb63e`). For the lexer, the authority is **`src/core/lexer.l`**. Verify against it rather than memory. `examples/` and `tests/data/` hold real `.scad` fixtures.
+- Entry point: `LexResult Lexer.Lex(SourceFile source)` → `LexResult(IReadOnlyList<Token> Tokens, IReadOnlyList<Diagnostic> Diagnostics)`. The stream **always ends with exactly one `Eof`** token. Build `Parser.Parse(SourceFile, IReadOnlyList<Token>)` per Slice-2 §4 and merge lexer diagnostics first (source order).
+- `Token` is a `readonly record struct`: `Kind`, `Text` (raw lexeme / `RawText`), `Span`, `LeadingTrivia`, `TrailingTrivia`, `BlankLineBefore`, `NumberValue` (`double?`), `StringValue` (`string?`).
+  - `Number` → `NumberLiteral(token.NumberValue!.Value, token.Text)`. `String` → `StringLiteral(token.StringValue!, token.Text)`.
+- **Trivia propagation (Slice-2 §9):** a node's `LeadingTrivia` + `BlankLineBefore` come from its **first** token; its `TrailingTrivia` from its **last** token (usually `;`/`}`/`)`). End-of-file comments live on the **`Eof` token's `LeadingTrivia`** — surface them on `ScadFile` so they aren't dropped.
+- **`include`/`use` are two tokens:** `Include`/`Use` followed by a `FilePath` token whose `Text`/`StringValue` is the raw path (no `<>`). Parse them as a pair → `IncludeStatement`/`UseStatement(rawPath)`.
 
-## Setup (Slice 1 §3–§4)
+## Slice 2 gotchas (where it's easy to go wrong)
 
-Create the solution and the two projects, with strict build settings:
-- `ScadBundler.sln`, `src/ScadBundler.Core/`, `tests/ScadBundler.Core.Tests/` (xUnit + coverlet).
-- `Directory.Build.props`: `net10.0`, `LangVersion latest`, `Nullable enable`, **`TreatWarningsAsErrors true`**, `EnforceCodeStyleInBuild true`, analyzers on, `GenerateDocumentationFile true`.
-- `.editorconfig`, `.gitignore`. Core has **no third-party dependencies**.
-- Folders this slice creates: `Text/`, `Trivia/`, `Diagnostics/`, `Lexing/` (see AST-Reference §17). `Ast/` and the parser arrive in Slice 2 — don't build them now.
+- **`intersection_for` is an `Identifier`, not a keyword** — but `for`/`let`/`assert`/`echo`/`each` ARE keyword tokens (`For`/`Let`/`Assert`/`Echo`/`Each`). So `module_id` name-recognition (Slice-2 §6) must read the name from **either** a keyword token's text **or** an `Identifier`: `For`→`ForStatement`, `Let`→`LetStatement`, `Identifier "intersection_for"`→`IntersectionForStatement`; `Echo`/`Assert`/`Each` tokens, `assign`, `child`/`children`, built-ins, and user names → generic `ModuleInstantiation`. Their named args become `Binding`s.
+- **Control flow is dedicated nodes, not `ModuleInstantiation`** (`if`/`for`/`intersection_for`/`let`) — AST §15.2. But `echo`/`assert`/`children`/`assign` at **statement** level ARE `ModuleInstantiation`s.
+- **Modifiers `* ! # %`** stack (`#%cube();`) → `IReadOnlyList<InstantiationModifier>` outer→inner. The lexer emits them as ordinary `Star`/`Not`/`Hash`/`Percent`; the parser decides modifier-vs-operator by position.
+- **Argument vs named-argument:** `Ident =` (an `Assign` token, **not** `==`) → `Argument(name, value)`; otherwise positional. Same idea for `Parameter` defaults.
+- **Child chaining:** after `name(args)`, a following instantiation becomes `Child` (`translate(...) rotate(...) cube(1);`); `{…}`→`BlockStatement` child; `;`→`Child = null`.
+- **Slice 2 vs Slice 3 boundary:** a vector element is strictly an `expr` in Slice 2. A `for`/`let`/`each`/`if` token starting a vector element, and the expression forms `let(…) e` / `assert(…) e` / `echo(…) e` / `function(…) e`, are **Slice 3** — define the records, don't parse them yet. Keep such inputs out of Slice 2 tests.
+- **`AstNode.Accept`:** §13 requires `abstract TResult Accept<TResult>(IAstVisitor<TResult>)` on the base and an override on all 40 concrete records. Hand-writing is fine; the boilerplate is mechanical (consider a small T4/source-gen only if it pays off — not required).
+
+## Conventions carried over from Slice 1 (so the build stays green)
+
+- **Strict build:** `Directory.Build.props` sets net10.0, nullable, `TreatWarningsAsErrors`, analyzers (`latest-Recommended`), `GenerateDocumentationFile`. Every **public** Core member needs an XML doc comment (CS1591 is an error). The test project sets `GenerateDocumentationFile=false`.
+- **Analyzer suppressions already in place (and why):** `.editorconfig` disables **CA1720** (domain token/AST names like `Number`/`String` legitimately match BCL type names) and **IDE0130** (`dotnet_style_namespace_match_folder=false`). `tests/.editorconfig` relaxes **CA1707/CA1822/CA1859/CA1515** for test idioms. Add new suppressions only with a written rationale.
+- **Namespace gotcha:** the `Trivia` *type* lives in the **root `ScadBundler.Core`** namespace (folder `Trivia/`), NOT `ScadBundler.Core.Trivia`, because a namespace named `Trivia` clashes with the type (CS0118). Your new AST records go in `ScadBundler.Core.Ast` and parser in `ScadBundler.Core.Parsing` — no clash there.
+- **`record struct` + property initializers** need an explicit parameterless ctor (see `Token`). AST nodes are `record` (class), so they're fine; immutable throughout, rebuild with `with`.
+- **Reusable test harness:** `tests/.../TestSupport/` has `CorpusLocator` (walks up to `ScadBundler.sln`, then `tests/Corpus/<slice>`), `LexDump` (golden render + line-ending normalize), and `LexHelper`. Build the analogous `AstDump` + `slice2-parser/<id>/{input.scad,expected.ast}` corpus, plus inline xUnit tests, the same way.
+- **Watch out for `char + char`** in C# = int addition (bit me in tests). Force string context.
+
+## Spec clarifications folded back during Slice 1 (already in the docs)
+
+- `\x00` decodes to a space; invalid `\u`/`\U` → `U+FFFD` (Slice-1 §7.4).
+- `FilePath` text is the **raw, untrimmed** path between `<`/`>`, CR/LF stripped (Slice-1 §7.6).
+- Test-Corpus `L-` cases use the final `TokenKind` enum names.
+
+If you find a genuine spec gap/ambiguity in Slice 2, **fix the spec too** (don't silently improvise) — this project's whole point is one-shot, spec-driven implementation.
 
 ## Non-negotiables (Constitution)
 
-- **Zero warnings** (warnings are errors). **Hand-written** scanner only — no ANTLR/regex for tokenizing.
-- **Immutable** types; `Token` is a `readonly record struct`.
-- **Collect diagnostics, never throw** on malformed input — the lexer always returns a token stream ending in `Eof`.
-- **≥95% line coverage** of `Lexing/`. TDD against the corpus.
-- No runtime interop with OpenSCAD's C++ (it's reference/fixtures only).
+- Hand-written recursive descent + precedence climbing — **no parser generators / ANTLR / regex** in the core path. Immutable AST records. **Collect diagnostics, never throw** (panic-mode recovery to a sync point: `;`, `}`, `Eof`, or a statement-start token). **≥95% line coverage** of `Parsing/`. No runtime interop with OpenSCAD's C++ (reference/fixtures only).
 
-## Slice 1 gotchas (these are where it's easy to go wrong)
+## Definition of Done (Slice-2 §13)
 
-- **Keyword set is exactly** `{module, function, if, else, for, let, assert, echo, each, true, false, undef}` + contextual `include`/`use`. **`intersection_for` and all built-in names (`cube`, `translate`, …) are `Identifier`s**, not keywords.
-- **Maximal munch**: `2d` lexes as one (deprecated, SB1008) `Identifier`, not `2` then `d`.
-- **Numbers** include hex `0x[0-9a-fA-F]+`, plus decimal/fraction/scientific — `.5` and `1.` are both valid. Store the parsed `double` in `NumberValue`; keep the raw lexeme in `Text` (that's the AST's `RawText`).
-- **String escapes**: `\n \t \r \\ \" \xHH \u#### \U######`; an unknown `\?` → SB1006 (warn, drop the backslash). Decoded value → `StringValue`, raw (incl. quotes) → `Text`.
-- **`$fn` etc. are `Identifier`s** (leading `$` is part of the identifier).
-- **`include`/`use` are contextual**: keyword only when the next non-whitespace char is `<`. Then scan the `<...>` path into a `FilePath` token (raw text, no escapes). We **do not open files** here — that's Slice 5.
-- **Trivia attachment**: comments → leading trivia of the next token; a **same-line** comment after a token → that token's *trailing* trivia (this is how Customizer `// [0:100]` annotations are preserved). `BlankLineBefore` = true when ≥1 blank line preceded the token. End-of-file comments attach to the `Eof` token.
-- `* ! # %` are lexed as ordinary tokens (`Star`/`Not`/`Hash`/`Percent`); the *parser* (Slice 2) decides modifier-vs-operator.
-
-## Definition of Done (Slice 1 §13)
-
-Zero-warning build; green xUnit; `L-001`..`L-004` + the §10 token/number/string/identifier/include-use/trivia/recovery batteries pass; every `TokenKind` produced by a test; each SB1001–SB1009 emitted for its trigger with recovery; `Lexing/` coverage ≥95%. Then Slice 2 can consume `LexResult.Tokens`.
+Full AST hierarchy + visitor compiles; `Parser.Parse` never throws; every statement form and ordinary expression parses correctly; `E-001`..`E-008`, `P-001`..`P-003`, and AST-Reference §14.1–14.5/14.8 parse to the documented trees; SB2001–SB2007 each fire + recover; build/tests green zero-warning; `Parsing/` coverage ≥95%.
 
 ## Commands
 
 ```
 dotnet build
 dotnet test
-dotnet test --filter "FullyQualifiedName~LexerTests"
+dotnet test --filter "FullyQualifiedName~ParserExpressionTests"
+dotnet test --collect:"XPlat Code Coverage"     # cobertura under TestResults/
 ```
 
 ## Workflow / repo conventions
 
-- This repo commits docs/code **directly to `main`** (solo, linear history). Commit when a unit is done.
-- **Conventional commits**; end commit messages with the `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>` trailer (see prior history).
-- On Windows you'll see `LF will be replaced by CRLF` warnings from Git — harmless. (Optional: add a `.gitattributes` with `* text=auto`.)
-- User memory (auto-loaded) holds durable conventions: diagnostic scheme, deprecation policy, AST decisions, the C++ source location, and the resolved V2 question.
+- Commits go on the current branch (`Claude_implementation`), **conventional commits**, ending with the `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>` trailer. Commit when a unit is done; don't push unless asked.
+- `.gitattributes` now forces **LF** everywhere (`* text=auto eol=lf`) — the old CRLF-churn warnings are gone.
+- User memory (auto-loaded) holds durable conventions: diagnostic scheme, deprecation policy, AST decisions, the C++ source location.
 
-## Do NOT
+## After Slice 2
 
-- Don't build the parser, AST `Statement`/`Expression` records, or open `include` targets — out of scope for Slice 1.
-- Don't add dependencies to Core.
-- Don't normalize/transform tokens — the lexer is faithful; transforms are Slices 4–5.
-
-## After Slice 1
-
-Slice 2 (`docs/slices/Slice-2-Parser.md`) builds the AST hierarchy + recursive-descent statement parser + precedence-climbing core-expression parser on top of your token stream. The pipeline is `SourceLoader → Lexer → Parser → SemanticAnalyzer → Inliner → Emitter` (see `docs/Design.md`).
+Slice 3 (`docs/slices/Slice-3-Parser-Expressions.md`) extends this parser with the functional sublanguage: list-comprehension generators inside `[…]` and the `let/assert/echo/function` expression forms (records already defined here). Pipeline: `SourceLoader → Lexer → Parser → SemanticAnalyzer → Inliner → Emitter`.

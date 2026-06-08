@@ -19,7 +19,7 @@ trim_trailing_whitespace = false
 # C# files
 [*.cs]
 indent_size = 4
-end_of_line = crlf
+end_of_line = lf
 
 #### .NET code style ####
 
