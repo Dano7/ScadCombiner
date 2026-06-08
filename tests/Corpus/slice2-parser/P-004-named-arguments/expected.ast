@@ -1,0 +1,12 @@
+ScadFile
+  ModuleInstantiation Name="cube"
+    Arguments:
+      Argument
+        Value: VectorExpression
+          Elements:
+            NumberLiteral Value=10 RawText="10"
+            NumberLiteral Value=20 RawText="20"
+            NumberLiteral Value=30 RawText="30"
+      Argument Name="center"
+        Value: BooleanLiteral Value=true
+    Child: null

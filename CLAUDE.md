@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **ScadBundler** is an AST-based OpenSCAD file bundler that combines multi-file OpenSCAD projects into a single file for upload to platforms like Thingiverse or MakerWorld. This is a C# .NET 10 CLI tool distributed as a NuGet global tool.
 
-**Slice 1 (project setup + lexer) is complete** — the solution (`ScadBundler.Core` + `ScadBundler.Core.Tests`) builds with zero warnings and the hand-written lexer passes its full test suite (≥95% line coverage of `Lexing/`). Slice 0.5 documentation is locked and mutually consistent. **The next step is Slice 2 (AST + recursive-descent parser)** — see [docs/slices/Slice-2-Parser.md](docs/slices/Slice-2-Parser.md). The lexer surfaces its output as `LexResult.Tokens` for the parser to consume.
+**Slices 1–2 are complete** — the solution (`ScadBundler.Core` + `ScadBundler.Core.Tests`) builds with zero warnings. Slice 1 delivered the hand-written lexer (≥95% line coverage of `Lexing/`). Slice 2 delivered the full immutable AST hierarchy (`Ast/` — all 40 records + `IAstVisitor<TResult>` + `Accept`) and the recursive-descent + precedence-climbing parser (`Parsing/` — `Parser`, `TokenCursor`, `ParseResult`; ≥95% line coverage; panic-mode recovery, SB2001–SB2007, never throws). `Parser.Parse(SourceFile)` lexes then parses; `Parser.Parse(SourceFile, tokens)` consumes an existing token stream. **The next step is Slice 3 (comprehensions + functional expression forms)** — see [docs/slices/Slice-3-Parser-Expressions.md](docs/slices/Slice-3-Parser-Expressions.md); the comprehension/`let`/`assert`/`echo`/`function` records already exist (defined in Slice 2) and just need parsing.
 
 ## Build & Run Commands
 

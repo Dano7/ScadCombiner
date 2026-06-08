@@ -1,0 +1,18 @@
+ScadFile
+  IfStatement
+    Condition: BinaryExpression Operator=Equal
+      Left: Identifier Name="n"
+      Right: NumberLiteral Value=0 RawText="0"
+    Then: ModuleInstantiation Name="a"
+      Arguments: []
+      Child: null
+    Else: IfStatement
+      Condition: BinaryExpression Operator=Equal
+        Left: Identifier Name="n"
+        Right: NumberLiteral Value=1 RawText="1"
+      Then: ModuleInstantiation Name="b"
+        Arguments: []
+        Child: null
+      Else: ModuleInstantiation Name="c"
+        Arguments: []
+        Child: null
