@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **ScadBundler** is an AST-based OpenSCAD file bundler that combines multi-file OpenSCAD projects into a single file for upload to platforms like Thingiverse or MakerWorld. This is a C# .NET 10 CLI tool distributed as a NuGet global tool.
 
-The repository is currently in **Slice 0.5** — the documentation completeness phase. No implementation code exists yet. The goal is to make each slice's documentation precise enough for one-shot AI implementation before any code is written.
+**Slice 0.5 (documentation completeness) is complete** — all six implementation slices are specified in [docs/slices/](docs/slices/) and the cross-cutting references are locked and mutually consistent. **No implementation code exists yet**; the next step is Slice 1 (project setup + lexer). When starting an implementation session, read **[handoff.md](handoff.md)** first — it points at [docs/slices/Slice-1-Lexer.md](docs/slices/Slice-1-Lexer.md) and the conventions to follow.
 
 ## Build & Run Commands
 
@@ -48,7 +48,7 @@ SourceLoader → Lexer → Parser → SemanticAnalyzer → Inliner → Emitter
 ## Key Design Decisions
 
 - **`include` vs `use`**: `include` brings in all definitions AND executes top-level calls; `use` imports only modules/functions. The bundler must replicate this semantic distinction.
-- **Collision resolution**: Configurable strategies for module name conflicts across merged files (namespace prefixing by default).
+- **Collision resolution**: origin-dependent by default — `include` duplicates are last-wins (matches OpenSCAD), `use`-imported names are namespace-prefixed to preserve library isolation; configurable via `--on-collision`.
 - **Customizer support**: Special handling for `/* [ Section ] */` comment blocks and `// [min:max:step]` parameter annotations.
 - **Web-ready**: Core library should be consumable via WASM/JSON API to power a future "ScadBundler Live" web companion.
 

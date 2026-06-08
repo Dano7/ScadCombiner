@@ -805,22 +805,23 @@ New genuine open questions should be appended here as they arise.
 
 ## 17. Suggested File Layout
 
-For the core library (`src/ScadBundler.Core/Ast/`), to aid the one-shot implementer:
+The full `ScadBundler.Core` tree, built up across slices (the per-slice docs are authoritative for what each slice creates). The AST records (this document) live under `Ast/`:
 
 ```
-Ast/
-  SourceFile.cs            // SourceFile, SourcePosition, SourceSpan
-  Trivia.cs                // Trivia, CommentTrivia, CommentKind
-  AstNode.cs               // AstNode base + Accept
-  ScadFile.cs              // root
-  Statements.cs            // all Statement records
-  Expressions.cs           // all Expression records (incl. comprehensions)
-  Support.cs               // Parameter, Argument, Binding
-  Enums.cs                 // InstantiationModifier, Unary/BinaryOperator
-  IAstVisitor.cs           // visitor interface (consider source-generating)
+src/ScadBundler.Core/
+  Text/         SourceFile.cs · SourcePosition.cs · SourceSpan.cs          # Slice 1
+  Trivia/       Trivia.cs (Trivia, CommentTrivia, CommentKind)            # Slice 1
+  Diagnostics/  Diagnostic.cs · DiagnosticSeverity.cs · DiagnosticCode.cs · DiagnosticBag.cs  # Slice 1
+  Lexing/       TokenKind.cs · Token.cs · Lexer.cs · LexResult.cs          # Slice 1
+  Ast/          AstNode.cs · ScadFile.cs · Statements.cs · Expressions.cs · Support.cs · Enums.cs · IAstVisitor.cs   # Slice 2
+  Parsing/      Parser.cs · ParseResult.cs · TokenCursor.cs                # Slices 2–3
+  Semantics/    SemanticAnalyzer.cs · ISemanticModel.cs · Symbol.cs        # Slice 4
+  Loading/      SourceLoader.cs · LoadGraph.cs                             # Slice 5
+  Inlining/     Inliner.cs · Bundler.cs · BundleOptions.cs · BundleResult.cs  # Slice 5
+  Emitting/     Emitter.cs · EmitOptions.cs                                # Slice 6
 ```
 
-> Grouping by category (not one-file-per-record) keeps the tree navigable and matches the "lean, clean" value. Split only if a file grows unwieldy.
+> **Note**: source-text primitives (`Text/`) and `Trivia/` are deliberately *outside* `Ast/` — they are not AST nodes. Grouping records by category (not one-file-per-record) keeps the tree navigable and matches the "lean, clean" value. Split only if a file grows unwieldy.
 
 ---
 

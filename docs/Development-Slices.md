@@ -31,7 +31,7 @@ Build **incrementally, test-driven**, with AI assistance. Grammar references wil
 **Status**: ✅ **Slice 0.5 essentially complete** — all six implementation slices are spec-ready and mutually consistent. Ready to begin implementation (Slice 1) or to run the AI-assistant comparison experiment.
 
 **Deliverables**:
-- Updated: `Spec.md`, `Parser-Planning.md`, `Constitution.md`, `UX.md`, `Development-Slices.md`, `CLAUDE.md` (`Design.md` reviewed — still accurate).
+- Updated: `Spec.md`, `Design.md`, `Parser-Planning.md`, `Constitution.md`, `UX.md`, `Development-Slices.md`, `README.md`, `CLAUDE.md`.
 - New reference docs: `AST-Reference.md`, `Diagnostics.md` (SB1xxx–SB6xxx), `Builtins-Reference.md`, `Test-Corpus.md`.
 - New per-slice specs: all six under `slices/` — `Slice-1-Lexer` … `Slice-6-Emitter-CLI`.
 
