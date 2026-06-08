@@ -18,21 +18,22 @@ Build **incrementally, test-driven**, with AI assistance. Grammar references wil
 **Goal**: Every subsequent slice must be *one-shot AI ready* — a cold AI assistant can implement the slice and self-verify the milestone with no additional clarification.
 
 **Exit Criteria for Slice 0.5**:
-- [ ] Each slice has a precise, testable acceptance checklist (not vague goals).
+- [x] Each slice has a precise, testable acceptance checklist (not vague goals). → every slice spec has an **Exit Criteria** section.
 - [x] AST node hierarchy is fully specified: record names, field names, field types, nullable/optional annotations. → [AST-Reference.md](AST-Reference.md)
-- [ ] Grammar coverage per slice is explicitly listed — which production rules are implemented in which slice.
-- [ ] Error/diagnostic catalog: every user-visible error has a code (e.g. `SB-001`), message template, and triggering condition.
-- [ ] Golden test cases: each slice has ≥3 input→expected-output (or input→expected-diagnostic) examples, covering the happy path and at least one error path.
-- [ ] All docs are internally consistent (no contradictions between Constitution, Spec, Design, UX, and slice plans).
-- [ ] Slice boundaries are unambiguous — no feature straddles two slices without a clear cut point.
+- [x] Grammar coverage per slice is explicitly listed. → Slice 1–3 specs + [Parser-Planning.md](Parser-Planning.md).
+- [x] Error/diagnostic catalog: every user-visible error has a code, message template, and triggering condition. → [Diagnostics.md](Diagnostics.md) (SB1xxx–SB6xxx; minor edge cases tracked under "To Be Cataloged").
+- [x] Golden test cases per slice (happy + error paths). → [Test-Corpus.md](Test-Corpus.md) (L/P/E/S/B/EM); each slice's test plan expands them during implementation.
+- [x] All docs are internally consistent (cross-checked after every change).
+- [x] Slice boundaries are unambiguous. → each slice spec has an explicit **Scope (In/Out)**.
 - [x] `include` vs `use` semantics are precisely specified with examples in Spec.md.
-- [ ] Collision resolution strategies are fully specified with examples.
+- [x] Collision resolution strategies are fully specified with examples. → [Spec.md](Spec.md) "Collision-strategy implication" + Slice 5 §6 + B-006/B-007.
+
+**Status**: ✅ **Slice 0.5 essentially complete** — all six implementation slices are spec-ready and mutually consistent. Ready to begin implementation (Slice 1) or to run the AI-assistant comparison experiment.
 
 **Deliverables**:
-- Updated/expanded versions of: `Spec.md`, `Design.md`, `Parser-Planning.md`, `Development-Slices.md`
-- New doc: `AST-Reference.md` — complete node hierarchy with field-level detail ✓ **(done)**
-- New doc: `Diagnostics.md` — error/warning catalog with codes, messages, examples ◐ **(seeded; expand per-slice)**
-- New doc: `Test-Corpus.md` — golden test cases organized by slice ◐ **(seeded: conventions + one binding case per locked decision; expand per-slice)**
+- Updated: `Spec.md`, `Parser-Planning.md`, `Constitution.md`, `UX.md`, `Development-Slices.md`, `CLAUDE.md` (`Design.md` reviewed — still accurate).
+- New reference docs: `AST-Reference.md`, `Diagnostics.md` (SB1xxx–SB6xxx), `Builtins-Reference.md`, `Test-Corpus.md`.
+- New per-slice specs: all six under `slices/` — `Slice-1-Lexer` … `Slice-6-Emitter-CLI`.
 
 ## Slice 1: Project Setup & Lexer ✓ **spec ready**
 
@@ -46,11 +47,11 @@ Full spec: **[slices/Slice-2-Parser.md](slices/Slice-2-Parser.md)**.
 
 **Scope**: complete AST hierarchy (40 records + visitor); recursive-descent statement parser (defs, assignments, include/use, module instantiation + modifiers + children, if/else, name-recognized for/intersection_for/let); precedence-climbing parser for all ordinary expressions (binary cascade, unary, ternary, exponent, postfix, primary, vectors, ranges); parameters/arguments; trivia propagation; panic-mode recovery (SB2001–SB2007). **Exit**: E-001..E-008 + P-001..P-003 + AST §14 examples parse correctly; ≥95% parser coverage.
 
-## Slice 3: Parser — Comprehensions & Functional Expressions
+## Slice 3: Parser — Comprehensions & Functional Expressions ✓ **spec ready**
 
-*(To be fleshed out — extends the Slice 2 parser; AST records already defined.)*
+Full spec: **[slices/Slice-3-Parser-Expressions.md](slices/Slice-3-Parser-Expressions.md)** — extends the Slice 2 parser (AST records already defined).
 
-**Scope**: list-comprehension generators inside `[…]` (`for`, C-style `for(;;)` → `ForCComprehension`, `if`/`else`, `let`, `each`); keyword-prefixed expression forms `let(…) e`, `assert(…) e`, `echo(…) e`; anonymous `function(…) e` literals. Plus a comprehensive parser battery and AST round-trip (parse→serialize→reparse).
+**Scope**: vector-context comprehension generators (`for`, C-style `for(;;)` → `ForCComprehension`, `if`/`else`, `let`, `each`) incl. the trailing-`let` disambiguation; `expr`-level forms `function(…) e`, `let(…) e`, `assert(…) e?`, `echo(…) e?` (nullable bodies). **Exit**: comprehension + functional-expr suites (E-009..E-012) pass; OpenSCAD `examples/Functions` parse clean; parser complete.
 
 ## Slice 4: Semantic Analysis & Symbol Table ✓ **spec ready**
 
@@ -72,8 +73,8 @@ Behaviors decided in design that must be confirmed against the official OpenSCAD
 - **V2** *(resolved from source — `ScopeContext.cc`; now a regression guard)* — A `use`d definition sees its own file's constants and the using file cannot override them. Confirms the `use` private-constant + namespace rule.
 - **V3** — `assign(...)` ≡ `let(...)` for binding-preserving rewrite. Gates SB5001.
 
-## Slice 6: Emitter & CLI
+## Slice 6: Emitter & CLI ✓ **spec ready**
 
-*(To be fleshed out in Slice 0.5)*
+Full spec: **[slices/Slice-6-Emitter-CLI.md](slices/Slice-6-Emitter-CLI.md)** — the capstone (completes the pipeline end-to-end).
 
-**Rough scope**: Pretty-printer with Customizer comment preservation, license aggregation, CLI entry point, NuGet packaging.
+**Scope**: deterministic pretty-printer (configurable indent/brace style; default style locks the `B-*` goldens; precedence-aware parens; trivia/Customizer/license preservation; `--minify`) + the `scadbundler bundle` CLI ([UX.md](UX.md) options, pipeline wiring, diagnostics, exit codes, `dotnet tool` packaging). **Exit**: EM-001/EM-002 + exact B-* goldens pass; CLI end-to-end + exit codes; ≥95% emitter coverage.

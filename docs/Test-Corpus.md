@@ -256,6 +256,49 @@ BinaryExpression { Operator=BitwiseOr, Left=Identifier "a",
     Right = BinaryExpression { Operator=Add, Left=Identifier "c", Right=Identifier "d" } } }
 ```
 
+**E-009 — let-comprehension vs trailing-let** *(Slice 3; the trailing-`let` rule)*
+```scad
+a = [let (n = 3) for (i = [0:n]) i];
+b = [let (n = 3) n];
+```
+```
+a → VectorExpression[ LetComprehension { Bindings=[Binding "n"=3],
+      Body=ForComprehension { Bindings=[Binding "i"=RangeExpression 0..n], Body=Identifier "i" } } ]
+b → VectorExpression[ LetExpression { Bindings=[Binding "n"=3], Body=Identifier "n" } ]
+```
+
+**E-010 — anonymous function literal** *(Slice 3)*
+```scad
+dbl = function (x) x * 2;
+```
+```
+AssignmentStatement { Name="dbl", Value = FunctionLiteral {
+  Parameters=[Parameter { Name="x" }],
+  Body = BinaryExpression { Operator=Multiply, Left=Identifier "x", Right=NumberLiteral 2 } } }
+```
+
+**E-011 — C-style for comprehension** *(Slice 3)*
+```scad
+xs = [for (i = 0; i < 5; i = i + 1) i];
+```
+```
+VectorExpression[ ForCComprehension {
+  Init=[ Binding "i"=NumberLiteral 0 ],
+  Condition = BinaryExpression { Operator=Less, Left=Identifier "i", Right=NumberLiteral 5 },
+  Update=[ Binding "i"=BinaryExpression { Operator=Add, Left=Identifier "i", Right=NumberLiteral 1 } ],
+  Body = Identifier "i" } ]
+```
+
+**E-012 — assert expression, with and without body** *(Slice 3; `expr_or_empty`)*
+```scad
+p = assert(n > 0) n;
+q = assert(n > 0);
+```
+```
+p → AssertExpression { Arguments=[ Argument { Value=(n > 0) } ], Body=Identifier "n" }
+q → AssertExpression { Arguments=[ Argument { Value=(n > 0) } ], Body=null }
+```
+
 ---
 
 ### Slice 4 — Semantic (`S-`)
@@ -448,6 +491,7 @@ Each locked decision maps to at least one binding case and, where behavioral, an
 | blank-line via `BlankLineBefore` (AST §15.7) | P-003 | — |
 | numbers are `double` + `RawText`, incl. hex (AST §15.9) | L-001, L-004, P-002 | — |
 | operator precedence/associativity (Parser-Planning, from `parser.y`) | E-001–E-008 | — |
+| comprehension & functional-expr grammar (from `parser.y`) | E-009–E-012 | — |
 | file resolution order + cycle detection (Spec, from `parsersettings.cc`) | B-001/B-002; modulecache fixtures | — |
 | include = last-wins, use = namespace (Spec, from `LocalScope`/`ScopeContext`) | B-006, B-007 | V2 |
 

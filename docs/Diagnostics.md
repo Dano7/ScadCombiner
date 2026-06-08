@@ -116,7 +116,12 @@ A list-comprehension generator (`for` / `if` / `let` / `each` in their comprehen
 - **Action**: keep one, drop the rest.
 - **Message**: `Duplicate definition '{name}' merged ({n} copies).`
 
+### SB6001 — Emitter self-check failure *(Error, Emitter — internal)*
+- **Trigger**: emitted output fails to re-parse to an equivalent AST (an internal emitter bug; should never occur in production).
+- **Message**: `Internal: emitted output failed to re-parse.`
+- **Notes**: enabled in debug/tests as a correctness guard. See [slices/Slice-6-Emitter-CLI.md](slices/Slice-6-Emitter-CLI.md) §6.
+
 ## To Be Cataloged (later Slice 0.5 work)
 - `SB3xxx`: arity issues (if statically decidable). *(Duplicate/reassignment = SB3003/SB3004; unknown reference = SB3005.)*
 - `SB4xxx`: path escapes allowed roots; ambiguous match across library paths. *(File-not-found and cycle now seeded as SB4001/SB4002.)*
-- `SB6xxx`: emitter-level fidelity warnings (if any).
+- `SB6xxx`: emitter fidelity warnings (if any). *(Self-check failure seeded as SB6001.)*
