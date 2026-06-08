@@ -73,6 +73,8 @@ public sealed class SemanticAnalyzer
 
 > Side tables (resolution map, references-to map) use `ReferenceEqualityComparer` (AST-Reference §15.6). The model is built over the **pre-inline** graph (the inliner needs it *before* flattening).
 
+> **Seam types.** `LoadGraph`/`LoadedFile`/`IncludeEdge`/`UseEdge` (namespace `ScadBundler.Core.Loading`) are introduced by **this** slice as the analyzer's input contract; Slice 5's `SourceLoader` *populates* them (resolving paths, detecting cycles). An `IncludeEdge`/`UseEdge` carries the originating statement and its resolved target (`null` when unresolved; a `UseEdge` may instead be a `FontPassthrough`). `Uses` is in source order; resolution consults it last-first (last-`use`-wins).
+
 ---
 
 ## 4. The scope tree
@@ -112,6 +114,8 @@ Only **File-scope** declarations produce renameable `Symbol`s. Everything inner 
 4. else unknown ⇒ **SB3005** (Warning), mirroring OpenSCAD's "Ignoring unknown module/function".
 
 > Own-scope shadows built-ins (a user `module cube()` shadows the primitive). Used-libraries are consulted **after** built-ins. A user-file declaration shadows a used-library one of the same name (so the user's call binds to their own; the used one is reachable only from its own library's code).
+
+> **Deprecated `assign`.** A `ModuleInstantiation` named `assign` is modeled as a `let`-like binding scope for its child (its named arguments bind for the child body), so the child's reads resolve correctly and don't false-positive **SB3005**. This is forward-consistent with the inliner's `assign`→`let` rewrite (SB5001); Slice 4 only models the scope, it does not rewrite the node.
 
 **Member access** `e.x`: validate the member ∈ {x,y,z} → else **SB3001**. (Not a name-binding.)
 

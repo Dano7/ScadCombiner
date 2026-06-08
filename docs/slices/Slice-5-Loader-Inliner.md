@@ -83,6 +83,8 @@ public sealed record LoadGraph(LoadedFile Root, IReadOnlyDictionary<string, Load
     IReadOnlyList<Diagnostic> Diagnostics);
 ```
 
+> **Already exists.** These records — plus `IncludeEdge(IncludeStatement, LoadedFile? Target)` and `UseEdge(UseStatement, LoadedFile? Target, bool FontPassthrough)` — were introduced in **Slice 4** under `src/ScadBundler.Core/Loading/LoadGraph.cs` (the analyzer consumes them). Slice 5 builds the `SourceLoader` that **populates** them; extend the records here only if the loader needs more (e.g. an absolute-path field), keeping the analyzer's consumption intact.
+
 Algorithm:
 1. Resolve the root to an absolute path; lex+parse it (Slices 1–3). Cache by absolute path (a `SourceFileCache` analog) so a file shared by many paths is parsed once.
 2. Walk the parsed AST for `IncludeStatement`/`UseStatement`. For each, **resolve** the raw path per Spec "File Resolution":

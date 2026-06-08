@@ -58,4 +58,24 @@ public static class DiagnosticCode
 
     /// <summary>An argument list is malformed.</summary>
     public const string InvalidArgumentList = "SB2007";
+
+    // Semantic analysis (SB3xxx)
+
+    /// <summary>A vector member access names a component outside <c>{x, y, z}</c>.</summary>
+    public const string InvalidMemberAccess = "SB3001";
+
+    /// <summary>A list-comprehension generator appears outside a <see cref="Ast.VectorExpression"/>.</summary>
+    public const string ComprehensionOutsideVector = "SB3002";
+
+    /// <summary>A variable is reassigned within a scope; the last assignment wins.</summary>
+    public const string VariableReassigned = "SB3003";
+
+    /// <summary>A module or function is redefined within a scope; the last definition wins.</summary>
+    public const string DefinitionRedefined = "SB3004";
+
+    /// <summary>
+    /// A reference resolves to nothing — not a built-in, special variable, local binding, or any
+    /// reachable user declaration. Emitted conservatively (only when all files are loaded).
+    /// </summary>
+    public const string UnknownReference = "SB3005";
 }

@@ -1,0 +1,1 @@
+SB3002 ERROR 1:8 'each' generator is only valid inside a list comprehension '[ ... ]'.

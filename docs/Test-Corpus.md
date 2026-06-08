@@ -316,12 +316,14 @@ Companion positive (no diagnostics): `ok = v.x;` → `expected.diag` absent.
 
 **S-002 — comprehension generator outside a vector** *(proves SB3002)*
 ```scad
-bad = each [1, 2, 3];
+bad = [each [1, 2, 3] : 5];
 ```
 ```
-SB3002 ERROR 1:7 'each' generator is only valid inside a list comprehension '[ ... ]'.
+SB3002 ERROR 1:8 'each' generator is only valid inside a list comprehension '[ ... ]'.
 ```
 Companion positive: `ok = [each [1, 2, 3]];` → no diagnostics.
+
+> **Note on the input form.** The bare `bad = each [1, 2, 3];` is rejected by the **parser** (`each` is not in the `expr` first-set → SB2005), so it never reaches the analyzer as a generator — the position restriction is enforced one layer earlier. The clean-parsing way to land a generator in a non-vector AST position is the range-start above (`[gen : end]` parses to a `RangeExpression` whose `Start` is the generator), which is exactly where SB3002 fires. The analyzer's guard is otherwise **defensive** — it matters for the synthesized/rewritten ASTs the Slice-5 inliner builds — and is additionally proven on a hand-constructed tree (`SemanticValidationTests.Generator_OutsideVector_ConstructedAst_Reports_SB3002`).
 
 ---
 
