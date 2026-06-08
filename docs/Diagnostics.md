@@ -41,6 +41,19 @@ Full detail and recovery behavior in [slices/Slice-1-Lexer.md](slices/Slice-1-Le
 | SB1008 | Warning | identifier starting with a digit | `Variable names starting with a digit ('{text}') are deprecated.` |
 | SB1009 | Warning | newline inside an include/use path | `Newline in include/use path is not well-defined.` |
 
+### Parser (SB2xxx)
+Full detail in [slices/Slice-2-Parser.md](slices/Slice-2-Parser.md) §10. The parser recovers via panic-mode (skip to a synchronization point) and never throws.
+
+| Code | Sev | Trigger | Message |
+|---|---|---|---|
+| SB2001 | Error | a specific expected token is missing | `Expected '{expected}' but found '{found}'.` |
+| SB2002 | Error | token valid nowhere here / unexpected EOF | `Unexpected {token}.` |
+| SB2003 | Error | `(`/`[`/`{` with no matching close | `Unclosed '{open}'; expected '{close}'.` |
+| SB2004 | Error | statement/def not terminated by `;` | `Missing ';' after {construct}.` |
+| SB2005 | Error | expression expected, none found | `Expected an expression.` |
+| SB2006 | Error | malformed parameter list | `Invalid parameter list.` |
+| SB2007 | Error | malformed argument list | `Invalid argument list.` |
+
 ### SB3001 — Invalid vector member access *(Error, Semantic)*
 A `MemberExpression` uses a component outside `{x, y, z}`.
 - **Trigger**: `v.w`, `v.foo`, etc.
@@ -72,7 +85,7 @@ A list-comprehension generator (`for` / `if` / `let` / `each` in their comprehen
 - **Notes**: OpenSCAD silently skips the recursive include (`parsersettings.cc` `check_valid` rejects already-open files); we report it. Fixtures: `tests/data/modulecache-tests/circular*` in the OpenSCAD repo.
 
 ### SB5001 — Deprecated `assign` normalized to `let` *(Warning, Inliner)*
-- **Trigger**: an `AssignStatement` in the input.
+- **Trigger**: a module call named `assign` (modern OpenSCAD parses `assign(...)` as an ordinary `ModuleInstantiation`; we recognize it by name).
 - **Action**: rewritten to an equivalent `LetStatement` (bindings preserved verbatim).
 - **Message**: `'assign' is deprecated; rewritten to 'let'. (Behavior preserved.)`
 - **Verification**: integration test V3.
@@ -89,7 +102,6 @@ A list-comprehension generator (`for` / `if` / `let` / `each` in their comprehen
 - **Message**: `'{name}' is deprecated in OpenSCAD; preserved unchanged. Consider migrating to its modern equivalent.`
 
 ## To Be Cataloged (later Slice 0.5 work)
-- `SB2xxx`: expected token, unbalanced brackets, malformed parameter/argument list, illegal modifier placement.
 - `SB3xxx`: undefined symbol (where decidable — conservative, see [Builtins-Reference.md](Builtins-Reference.md)), arity issues (if in scope). *(Duplicate definition/reassignment now seeded as SB3003/SB3004.)*
 - `SB4xxx`: path escapes allowed roots; ambiguous match across library paths. *(File-not-found and cycle now seeded as SB4001/SB4002.)*
 - `SB5xxx`: collision resolution actions (rename applied), dedup actions.

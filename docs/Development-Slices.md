@@ -40,17 +40,17 @@ Full spec: **[slices/Slice-1-Lexer.md](slices/Slice-1-Lexer.md)**.
 
 **Scope**: .NET 10 solution + Core/Tests projects + build/analyzer config; foundational text & trivia types; diagnostics plumbing; hand-written lexer (all token kinds, hex/escape decoding, comment trivia, `BlankLineBefore`, precise source spans) with diagnostics SB1001–SB1009. **Exit**: zero-warning build, green xUnit, corpus L-001..L-004 + token battery pass, ≥95% lexer coverage.
 
-## Slice 2: Parser (Core Statements)
+## Slice 2: Parser — Statements & Core Expressions ✓ **spec ready**
 
-*(To be fleshed out in Slice 0.5)*
+Full spec: **[slices/Slice-2-Parser.md](slices/Slice-2-Parser.md)**.
 
-**Rough scope**: Recursive descent parser for top-level statements — module declarations, function declarations, variable assignments, `include`/`use` statements. Immutable AST record types.
+**Scope**: complete AST hierarchy (40 records + visitor); recursive-descent statement parser (defs, assignments, include/use, module instantiation + modifiers + children, if/else, name-recognized for/intersection_for/let); precedence-climbing parser for all ordinary expressions (binary cascade, unary, ternary, exponent, postfix, primary, vectors, ranges); parameters/arguments; trivia propagation; panic-mode recovery (SB2001–SB2007). **Exit**: E-001..E-008 + P-001..P-003 + AST §14 examples parse correctly; ≥95% parser coverage.
 
-## Slice 3: Parser (Expressions & Full Grammar)
+## Slice 3: Parser — Comprehensions & Functional Expressions
 
-*(To be fleshed out in Slice 0.5)*
+*(To be fleshed out — extends the Slice 2 parser; AST records already defined.)*
 
-**Rough scope**: Pratt/precedence-climbing expression parser, remaining grammar rules, full round-trip parse-then-emit test.
+**Scope**: list-comprehension generators inside `[…]` (`for`, C-style `for(;;)` → `ForCComprehension`, `if`/`else`, `let`, `each`); keyword-prefixed expression forms `let(…) e`, `assert(…) e`, `echo(…) e`; anonymous `function(…) e` literals. Plus a comprehensive parser battery and AST round-trip (parse→serialize→reparse).
 
 ## Slice 4: Semantic Analysis & Symbol Table
 

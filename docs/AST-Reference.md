@@ -246,17 +246,9 @@ public sealed record LetStatement(
 ```csharp
 /// A lone `;`. Retained for fidelity; the emitter MAY elide it.
 public sealed record EmptyStatement() : Statement;
-
-/// Deprecated `assign(Bindings) Body`. FULLY SUPPORTED: parsed faithfully here,
-/// then normalized to LetStatement by the inliner (Slice 5) with warning SB5001.
-/// `assign` evaluates all RHS in the OUTER scope and forbids sibling references,
-/// so a direct binding-preserving rewrite to `let` is semantically equivalent
-/// (verified by integration test V3). See Spec.md "Deprecated Language Feature Policy".
-public sealed record AssignStatement(
-    IReadOnlyList<Binding> Bindings,
-    Statement Body
-) : Statement;
 ```
+
+> **No `AssignStatement` node.** Modern OpenSCAD (`parser.y` 2019.05) **removed** the `assign` keyword — `assign(a = 1) child` now parses as an ordinary `ModuleInstantiation` named `assign` (just like any other call). The deprecation rewrite `assign`→`let` (SB5001) is therefore a **normalizer transform** that recognizes a module call named `assign` (with named arguments → `let` bindings), exactly as `child`→`children` (SB5002) is handled. This keeps the AST lean and grammar-accurate. See [Parser-Planning.md](Parser-Planning.md) and [Spec.md](Spec.md).
 
 ---
 
@@ -499,7 +491,7 @@ Several OpenSCAD keywords map to different nodes depending on syntactic context.
 | `assert` | `ModuleInstantiation` (name `assert`) | `AssertExpression` | — |
 | `echo`   | `ModuleInstantiation` (name `echo`) | `EchoExpression` | — |
 | `function` | `FunctionDefinition` (named) | `FunctionLiteral` (anonymous) | — |
-| `assign` | `AssignStatement` (deprecated) | — | — |
+| `assign` | `ModuleInstantiation` (deprecated; normalized → `let`, SB5001) | — | — |
 
 ---
 
@@ -543,7 +535,7 @@ Every concrete node, grouped. This list is exhaustive — it doubles as the set 
 
 **Root (1):** `ScadFile`
 
-**Statements (13):** `IncludeStatement`, `UseStatement`, `ModuleDefinition`, `FunctionDefinition`, `AssignmentStatement`, `ModuleInstantiation`, `BlockStatement`, `IfStatement`, `ForStatement`, `IntersectionForStatement`, `LetStatement`, `EmptyStatement`, `AssignStatement`
+**Statements (12):** `IncludeStatement`, `UseStatement`, `ModuleDefinition`, `FunctionDefinition`, `AssignmentStatement`, `ModuleInstantiation`, `BlockStatement`, `IfStatement`, `ForStatement`, `IntersectionForStatement`, `LetStatement`, `EmptyStatement`
 
 **Expressions (23):** `NumberLiteral`, `StringLiteral`, `BooleanLiteral`, `UndefLiteral`, `Identifier`, `VectorExpression`, `RangeExpression`, `BinaryExpression`, `UnaryExpression`, `ConditionalExpression`, `ParenthesizedExpression`, `IndexExpression`, `MemberExpression`, `FunctionCallExpression`, `LetExpression`, `AssertExpression`, `EchoExpression`, `FunctionLiteral`, `ForComprehension`, `ForCComprehension`, `IfComprehension`, `LetComprehension`, `EachExpression`
 
@@ -551,7 +543,7 @@ Every concrete node, grouped. This list is exhaustive — it doubles as the set 
 
 **Trivia (1):** `CommentTrivia`
 
-> Total concrete node types: **41** (1 root + 13 statements + 23 expressions + 3 supporting + 1 trivia). The five comprehension generators (`ForComprehension`, `ForCComprehension`, `IfComprehension`, `LetComprehension`, `EachExpression`) are counted among expressions.
+> Total concrete node types: **40** (1 root + 12 statements + 23 expressions + 3 supporting + 1 trivia). The five comprehension generators (`ForComprehension`, `ForCComprehension`, `IfComprehension`, `LetComprehension`, `EachExpression`) are counted among expressions.
 
 ---
 
@@ -577,7 +569,6 @@ public interface IAstVisitor<out TResult>
     TResult Visit(IntersectionForStatement node);
     TResult Visit(LetStatement node);
     TResult Visit(EmptyStatement node);
-    TResult Visit(AssignStatement node);
 
     // expressions
     TResult Visit(NumberLiteral node);

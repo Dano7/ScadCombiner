@@ -74,7 +74,7 @@ Ternary and the `let`/`assert`/`echo`/`function` prefixes are handled at the `ex
 
 ## Deprecated Constructs (parse faithfully)
 The parser **accepts** deprecated syntax without complaint; normalization and warnings happen downstream (semantic/inliner), not in the parser:
-- `assign(bindings) child` → parse to `AssignStatement` (later rewritten to `let`, SB5001).
+- `assign(bindings) child` → parses as a generic `ModuleInstantiation` named `assign` (modern OpenSCAD removed the `assign` keyword); the normalizer later rewrites it to `let` (SB5001), the same mechanism as `child`→`children`. No dedicated AST node.
 - `child` / `child(n)` → ordinary `ModuleInstantiation` named `child` (later rewritten to `children`, SB5002).
 - `.x/.y/.z` member access → parse `.` + identifier into `MemberExpression` with `string Member`; the parser does **not** reject other identifiers — the semantic pass validates (SB3001).
 
