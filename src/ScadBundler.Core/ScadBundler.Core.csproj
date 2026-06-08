@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>ScadBundler.Core</RootNamespace>
+    <AssemblyName>ScadBundler.Core</AssemblyName>
+  </PropertyGroup>
+
+</Project>

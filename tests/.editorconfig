@@ -1,0 +1,13 @@
+# Test-project-specific relaxations.
+# Test method naming (Method_Scenario_Expected) and xUnit idioms trip a few
+# analyzers that are valuable in shipping code but noise in tests.
+[*.cs]
+
+# Underscores in test method names are intentional and conventional.
+dotnet_diagnostic.CA1707.severity = none
+
+# Test methods are invoked by the framework; "could be static" is irrelevant.
+dotnet_diagnostic.CA1822.severity = none
+
+# Tests are not a public API surface.
+dotnet_diagnostic.CA1515.severity = none

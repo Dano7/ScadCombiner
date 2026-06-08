@@ -1,5 +1,7 @@
 # Handoff — Start Here (Slice 1 Implementation)
 
+> **✅ Slice 1 is complete** (lexer implemented; `dotnet build` zero-warning, `dotnet test` green, `Lexing/` line coverage ≈98%). The notes below are retained as the record of how Slice 1 was approached. **If you are starting a new session, your job is Slice 2** — read [docs/slices/Slice-2-Parser.md](docs/slices/Slice-2-Parser.md) and build the AST + recursive-descent parser on top of `LexResult.Tokens`. Two small spec clarifications were folded back during Slice 1: the `\x00`→space / invalid-`\u`→`U+FFFD` decoding notes in Slice-1 §7.4, the raw (untrimmed) FILEPATH text in §7.6, and the Test-Corpus `L-` cases now use the final `TokenKind` names.
+
 You are picking up **ScadBundler**, an AST-based OpenSCAD file bundler (C# / .NET 10, distributed as a `dotnet tool`). The documentation phase is done; you're starting the **first implementation slice**.
 
 ## Current state (read this first)

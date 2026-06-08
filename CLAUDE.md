@@ -6,18 +6,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **ScadBundler** is an AST-based OpenSCAD file bundler that combines multi-file OpenSCAD projects into a single file for upload to platforms like Thingiverse or MakerWorld. This is a C# .NET 10 CLI tool distributed as a NuGet global tool.
 
-**Slice 0.5 (documentation completeness) is complete** — all six implementation slices are specified in [docs/slices/](docs/slices/) and the cross-cutting references are locked and mutually consistent. **No implementation code exists yet**; the next step is Slice 1 (project setup + lexer). When starting an implementation session, read **[handoff.md](handoff.md)** first — it points at [docs/slices/Slice-1-Lexer.md](docs/slices/Slice-1-Lexer.md) and the conventions to follow.
+**Slice 1 (project setup + lexer) is complete** — the solution (`ScadBundler.Core` + `ScadBundler.Core.Tests`) builds with zero warnings and the hand-written lexer passes its full test suite (≥95% line coverage of `Lexing/`). Slice 0.5 documentation is locked and mutually consistent. **The next step is Slice 2 (AST + recursive-descent parser)** — see [docs/slices/Slice-2-Parser.md](docs/slices/Slice-2-Parser.md). The lexer surfaces its output as `LexResult.Tokens` for the parser to consume.
 
 ## Build & Run Commands
-
-Once implemented (Slice 1+):
 
 ```bash
 dotnet build
 dotnet test
 dotnet test --filter "FullyQualifiedName~LexerTests"   # run a single test class
-dotnet run --project src/ScadBundler -- bundle myproject.scad -o bundled.scad
-dotnet tool install --global ScadBundler                # end-user install
+dotnet test --collect:"XPlat Code Coverage"            # coverage (cobertura)
+# (CLI project src/ScadBundler arrives in Slice 6)
+# dotnet run --project src/ScadBundler -- bundle myproject.scad -o bundled.scad
+# dotnet tool install --global ScadBundler             # end-user install
 ```
 
 ## Architecture

@@ -1,0 +1,5 @@
+Identifier 1:1 n
+Assign 1:3 =
+Number 1:5 0xFF
+Semicolon 1:9 ;
+Eof 2:1

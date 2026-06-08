@@ -1,0 +1,47 @@
+## .NET / Visual Studio build artifacts
+[Bb]in/
+[Oo]bj/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Ww][Ii][Nn]32/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+build/
+bld/
+[Oo]ut/
+msbuild.log
+msbuild.err
+msbuild.wrn
+
+## Test / coverage results
+[Tt]est[Rr]esult*/
+TestResults/
+*.coverage
+*.coveragexml
+coverage*.json
+coverage*.xml
+coverage*.info
+coverage*.cobertura.xml
+*.trx
+
+## Rider / Visual Studio user-specific files
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+.idea/
+
+## NuGet
+*.nupkg
+*.snupkg
+.nuget/
+project.lock.json
+project.fragment.lock.json
+artifacts/
+
+## OS files
+.DS_Store
+Thumbs.db

@@ -63,14 +63,8 @@ tests/
 
 ## 4. Notation
 
-**Tokens** (`expected.tokens`) — one per line, `KIND line:col lexeme`. The `TokenKind` set is *proposed here*, finalized in Slice 1 / [Parser-Planning.md](Parser-Planning.md):
-```
-ASSIGN, SEMI, COMMA, COLON, DOT, LPAREN, RPAREN, LBRACE, RBRACE, LBRACKET, RBRACKET,
-PLUS, MINUS, STAR, SLASH, PERCENT, CARET, LT, LE, GT, GE, EQ, NE, AND, OR, NOT, QUESTION,
-BANG, HASH, IDENT, NUMBER, STRING, TRUE, FALSE, UNDEF,
-MODULE, FUNCTION, IF, ELSE, FOR, INTERSECTION_FOR, LET, ASSIGN_KW, EACH, INCLUDE, USE, EOF
-```
-> Note: `*` and `%` lex as `STAR`/`PERCENT`; whether they mean operator or modifier is the parser's call by position. Special variables (`$fn`, …) lex as `IDENT` with the `$` included.
+**Tokens** (`expected.tokens`) — one per line, `<Kind> <line>:<col> <lexeme>` where `<Kind>` is the `TokenKind` enum member name and `<line>:<col>` is the token span's start (1-based). The `Eof` line has no lexeme. The **authoritative** `TokenKind` set is the enum **finalized in [Slice-1-Lexer.md](slices/Slice-1-Lexer.md) §6** — the `L-` cases below use those exact names (e.g. `Identifier`, `Assign`, `Semicolon`, `Eof`).
+> Note: `*` and `%` lex as `Star`/`Percent`; whether they mean operator or modifier is the parser's call by position. Special variables (`$fn`, …) lex as `Identifier` with the `$` included.
 
 **AST** (`expected.ast`) — shown in this doc using the readable notation from [AST-Reference.md](AST-Reference.md) §14 (`NodeName { field = value }`). The on-disk canonical serialization format is finalized in Slice 2 (built alongside the parser); it must be deterministic and isomorphic to this notation. `Span`/trivia omitted unless under test.
 
@@ -92,13 +86,13 @@ SBnnnn <ERROR|WARNING|INFO> <line>:<col> <message>
 x = 1 + 2.5e3;
 ```
 ```
-IDENT 1:1 x
-ASSIGN 1:3 =
-NUMBER 1:5 1
-PLUS 1:7 +
-NUMBER 1:9 2.5e3
-SEMI 1:14 ;
-EOF 2:1
+Identifier 1:1 x
+Assign 1:3 =
+Number 1:5 1
+Plus 1:7 +
+Number 1:9 2.5e3
+Semicolon 1:14 ;
+Eof 2:1
 ```
 
 **L-002 — string escapes, special var, line comment**
@@ -106,11 +100,11 @@ EOF 2:1
 $fn = 100; // smooth
 ```
 ```
-IDENT 1:1 $fn
-ASSIGN 1:5 =
-NUMBER 1:7 100
-SEMI 1:10 ;
-EOF 2:1
+Identifier 1:1 $fn
+Assign 1:5 =
+Number 1:7 100
+Semicolon 1:10 ;
+Eof 2:1
 ```
 > Comment text is attached as trivia, not emitted as a token.
 
@@ -127,11 +121,11 @@ SB1001 ERROR 1:5 Unterminated string literal.
 n = 0xFF;
 ```
 ```
-IDENT 1:1 n
-ASSIGN 1:3 =
-NUMBER 1:5 0xFF
-SEMI 1:9 ;
-EOF 2:1
+Identifier 1:1 n
+Assign 1:3 =
+Number 1:5 0xFF
+Semicolon 1:9 ;
+Eof 2:1
 ```
 > The resulting `NumberLiteral` has `Value=255, RawText="0xFF"`.
 

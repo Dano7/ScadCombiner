@@ -203,6 +203,8 @@ Match (longest first):
 ### 7.4 Strings (`String`, `StringValue` = decoded, `Text` = raw incl. quotes)
 Opening `"` starts a string. Inside:
 - Escapes: `\n`→LF, `\t`→TAB, `\r`→CR, `\\`→`\`, `\"`→`"`, `\x` + two hex (`\x[0-7][0-9a-fA-F]`)→byte, `\u` + 4 hex→UTF-8, `\U` + 6 hex→UTF-8.
+  - **`\x00` decodes to a space** (`U+0020`), not a NUL — matching OpenSCAD's `lexer.l` (`i == 0 ? ' '`).
+  - A `\u`/`\U` escape whose value is not a valid Unicode scalar (e.g. a lone surrogate `\uD800`, or `> U+10FFFF`) decodes to the replacement char `U+FFFD`.
 - Any other `\?` → **SB1006** (Warning, "Undefined escape sequence"); drop the backslash, keep the following character.
 - Closing `"` ends it. Unterminated at EOL/EOF → **SB1001** (Error); emit the partial string and recover at the newline/EOF.
 - `StringValue` is the decoded content; `Text` is the verbatim literal including the surrounding quotes and original escapes.
@@ -214,7 +216,7 @@ Opening `"` starts a string. Inside:
 
 ### 7.6 `include` / `use` and FILEPATH (contextual)
 OpenSCAD treats `include`/`use` specially only when followed by `<`. Replicate:
-- When an identifier scans to `include` or `use` **and** the next non-whitespace character is `<`: emit `Include`/`Use`, then enter path mode — consume the `<`, capture raw text up to the next `>` as a `FilePath` token (`Text`/`StringValue` = trimmed path, no escape processing; may contain `/`, `.`, spaces). Consume the `>`.
+- When an identifier scans to `include` or `use` **and** the next non-whitespace character is `<` (whitespace, including newlines, may separate them — `lexer.l` uses `include[ \t\r\n]*"<"`): emit `Include`/`Use`, then enter path mode — consume the `<`, capture raw text up to the next `>` as a `FilePath` token. `Text`/`StringValue` = the **raw path text between `<` and `>`** with carriage returns and newlines removed (no escape processing, no trimming of spaces); may contain `/`, `.`, spaces. Consume the `>`.
   - A newline before `>` → **SB1009** (Warning) but keep scanning.
   - EOF before `>` → **SB1003** (Error, "Unterminated include/use statement").
 - Otherwise (`include`/`use` not followed by `<`): emit as a plain `Identifier`. (Rare, but matches OpenSCAD.)
