@@ -44,7 +44,7 @@ rootPath
 
 ## 4. Consumed contract from Slice 4 (the Slice 4 ↔ 5 interface)
 
-Slice 5 needs reference/symbol facts it must not recompute. Slice 4's spec will finalize this; the Inliner depends only on these queries:
+Slice 5 needs reference/symbol facts it must not recompute. **[Slice 4](Slice-4-Semantic.md) owns and finalizes `ISemanticModel` + `Symbol`** (authoritative there). The Inliner depends only on these queries:
 
 ```csharp
 public interface ISemanticModel

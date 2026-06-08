@@ -75,6 +75,11 @@ A list-comprehension generator (`for` / `if` / `let` / `each` in their comprehen
 - **Message**: `{module|function} '{name}' is redefined; the last definition wins.`
 - **Notes**: OpenSCAD is silent here (`LocalScope.cc` overwrites the lookup entry); we warn. Under `--on-collision rename`/`prefix` the definitions are instead kept and renamed — see Spec collision strategy.
 
+### SB3005 — Unknown reference *(Warning, Semantic)*
+- **Trigger**: a module/function/variable reference that resolves to nothing — not a built-in, special variable, local binding, or any reachable user declaration. Emitted **conservatively** (only when all files are loaded).
+- **Message**: `Unknown {module|function|variable} '{name}'.`
+- **Notes**: mirrors OpenSCAD's "Ignoring unknown …" warnings; conservative to avoid false positives from library names the analyzer can't see. See [slices/Slice-4-Semantic.md](slices/Slice-4-Semantic.md) §8.
+
 ### SB4001 — Include/use file not found *(Warning, Loader)*
 - **Trigger**: a `<path>` cannot be resolved on the search path (Spec "File Resolution").
 - **Message**: `Can't find '{path}' on the search path; statement ignored.`
@@ -112,6 +117,6 @@ A list-comprehension generator (`for` / `if` / `let` / `each` in their comprehen
 - **Message**: `Duplicate definition '{name}' merged ({n} copies).`
 
 ## To Be Cataloged (later Slice 0.5 work)
-- `SB3xxx`: undefined symbol (where decidable — conservative, see [Builtins-Reference.md](Builtins-Reference.md)), arity issues (if in scope). *(Duplicate definition/reassignment now seeded as SB3003/SB3004.)*
+- `SB3xxx`: arity issues (if statically decidable). *(Duplicate/reassignment = SB3003/SB3004; unknown reference = SB3005.)*
 - `SB4xxx`: path escapes allowed roots; ambiguous match across library paths. *(File-not-found and cycle now seeded as SB4001/SB4002.)*
 - `SB6xxx`: emitter-level fidelity warnings (if any).

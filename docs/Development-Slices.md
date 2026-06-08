@@ -52,11 +52,11 @@ Full spec: **[slices/Slice-2-Parser.md](slices/Slice-2-Parser.md)**.
 
 **Scope**: list-comprehension generators inside `[…]` (`for`, C-style `for(;;)` → `ForCComprehension`, `if`/`else`, `let`, `each`); keyword-prefixed expression forms `let(…) e`, `assert(…) e`, `echo(…) e`; anonymous `function(…) e` literals. Plus a comprehensive parser battery and AST round-trip (parse→serialize→reparse).
 
-## Slice 4: Semantic Analysis & Symbol Table
+## Slice 4: Semantic Analysis & Symbol Table ✓ **spec ready**
 
-*(To be fleshed out in Slice 0.5)*
+Full spec: **[slices/Slice-4-Semantic.md](slices/Slice-4-Semantic.md)** — owns the `ISemanticModel` contract the Slice 5 inliner consumes.
 
-**Rough scope**: Symbol table construction, scope resolution, collision detection across merged files. Built-in recognition via [Builtins-Reference.md](Builtins-Reference.md) (treat unknown names as user/library symbols — do not hard-error). Validation diagnostics: vector member access ∈ {x,y,z} (**SB3001**), comprehension generators only inside vectors (**SB3002**), variable reassignment last-wins (**SB3003**), definition redefinition (**SB3004**). See [Diagnostics.md](Diagnostics.md).
+**Scope**: scope-tree construction; OpenSCAD-accurate name binding/reference resolution (last-wins variables, dynamically-scoped special vars, own→builtins→usedlibs lookup); built-in recognition via [Builtins-Reference.md](Builtins-Reference.md) (unknown names = user/library symbols, no hard-error); `PrivateConstants` transitive reachability (the V2 enabler); within-scope duplicate detection (**SB3003**/**SB3004**); validation (**SB3001**/**SB3002**/**SB3005**). Cross-file collision *resolution* is the Slice 5 inliner, which uses this model's per-file queries + `ReferencesTo`. **Exit**: S-001/S-002 + resolution/PrivateConstants suites pass; ≥95% coverage.
 
 ## Slice 5: Source Loader & Inliner ✓ **spec ready**
 
