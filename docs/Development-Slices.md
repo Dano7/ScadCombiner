@@ -58,11 +58,11 @@ Full spec: **[slices/Slice-2-Parser.md](slices/Slice-2-Parser.md)**.
 
 **Rough scope**: Symbol table construction, scope resolution, collision detection across merged files. Built-in recognition via [Builtins-Reference.md](Builtins-Reference.md) (treat unknown names as user/library symbols — do not hard-error). Validation diagnostics: vector member access ∈ {x,y,z} (**SB3001**), comprehension generators only inside vectors (**SB3002**), variable reassignment last-wins (**SB3003**), definition redefinition (**SB3004**). See [Diagnostics.md](Diagnostics.md).
 
-## Slice 5: Source Loader & Inliner
+## Slice 5: Source Loader & Inliner ✓ **spec ready**
 
-*(To be fleshed out in Slice 0.5)*
+Full spec: **[slices/Slice-5-Loader-Inliner.md](slices/Slice-5-Loader-Inliner.md)**. Consumes the Slice 4 `ISemanticModel` contract (defined in that doc, §4).
 
-**Rough scope**: Recursive `include`/`use` resolution using the search-path order in [Spec.md](Spec.md) "File Resolution" (file dir → `OPENSCADPATH` → user libs → built-in libs), cycle detection (**SB4001**/**SB4002**), dependency ordering, deduplication. Origin-dependent collision strategy: `include` = last-wins, `use` = namespace/prefix (Spec "Collision-strategy implication"). Implements the `use` private-constant rule, font `use` pass-through, and deprecated-construct normalization: `assign`→`let` (**SB5001**), `child`→`children` (**SB5002**), preserve deprecated built-ins (**SB5003**).
+**Scope**: SourceLoader (resolve per Spec search order, parse-cache, include/use graph, cycle detection SB4001/SB4002, font passthrough) + Inliner (inline includes in document order; import `use`d defs + private constants with namespacing-on-collision and reference rewriting; origin-dependent collisions SB5004; structural dedup SB5005; normalize assign→let / child→children / preserve deprecated built-ins SB5001–3; assemble one `ScadFile` with license aggregation + Customizer trivia). **Exit**: B-001..B-007 pass; ≥95% coverage.
 
 ## Integration Verification Backlog
 

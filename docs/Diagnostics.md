@@ -101,8 +101,17 @@ A list-comprehension generator (`for` / `if` / `let` / `each` in their comprehen
 - **Action**: **preserved verbatim** (the bundler combines files; it does not refactor model behavior).
 - **Message**: `'{name}' is deprecated in OpenSCAD; preserved unchanged. Consider migrating to its modern equivalent.`
 
+### SB5004 — Name renamed to resolve collision *(Warning, Inliner)*
+- **Trigger**: a definition (or its private constant) is renamed/namespaced to resolve a cross-file collision (default for `use`-imported names; or any origin under `--on-collision prefix`).
+- **Action**: rename + rewrite all bound references.
+- **Message**: `'{name}' from '{file}' renamed to '{newname}' to resolve a collision.`
+
+### SB5005 — Duplicate definition deduplicated *(Info, Inliner)*
+- **Trigger**: structurally-identical definitions (same kind/name/params/body, ignoring spans & trivia) arrive via multiple include/use paths (e.g. a diamond include).
+- **Action**: keep one, drop the rest.
+- **Message**: `Duplicate definition '{name}' merged ({n} copies).`
+
 ## To Be Cataloged (later Slice 0.5 work)
 - `SB3xxx`: undefined symbol (where decidable — conservative, see [Builtins-Reference.md](Builtins-Reference.md)), arity issues (if in scope). *(Duplicate definition/reassignment now seeded as SB3003/SB3004.)*
 - `SB4xxx`: path escapes allowed roots; ambiguous match across library paths. *(File-not-found and cycle now seeded as SB4001/SB4002.)*
-- `SB5xxx`: collision resolution actions (rename applied), dedup actions.
 - `SB6xxx`: emitter-level fidelity warnings (if any).
