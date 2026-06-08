@@ -1,0 +1,11 @@
+ScadFile
+  AssignmentStatement Name="flat"
+    Value: VectorExpression
+      Elements:
+        EachExpression
+          Value: VectorExpression
+            Elements:
+              NumberLiteral Value=1 RawText="1"
+              NumberLiteral Value=2 RawText="2"
+              NumberLiteral Value=3 RawText="3"
+        NumberLiteral Value=4 RawText="4"

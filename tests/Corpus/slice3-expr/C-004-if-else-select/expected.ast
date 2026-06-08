@@ -1,0 +1,19 @@
+ScadFile
+  AssignmentStatement Name="signs"
+    Value: VectorExpression
+      Elements:
+        ForComprehension
+          Bindings:
+            Binding Name="i"
+              Value: RangeExpression
+                Start: UnaryExpression Operator=Negate
+                  Operand: NumberLiteral Value=1 RawText="1"
+                Step: null
+                End: NumberLiteral Value=1 RawText="1"
+          Body: IfComprehension
+            Condition: BinaryExpression Operator=Less
+              Left: Identifier Name="i"
+              Right: NumberLiteral Value=0 RawText="0"
+            Then: UnaryExpression Operator=Negate
+              Operand: NumberLiteral Value=1 RawText="1"
+            Else: NumberLiteral Value=1 RawText="1"

@@ -1,0 +1,16 @@
+ScadFile
+  AssignmentStatement Name="p"
+    Value: AssertExpression
+      Arguments:
+        Argument
+          Value: BinaryExpression Operator=Greater
+            Left: Identifier Name="n"
+            Right: NumberLiteral Value=0 RawText="0"
+      Body: Identifier Name="n"
+  AssignmentStatement Name="q"
+    Value: AssertExpression
+      Arguments:
+        Argument
+          Value: BinaryExpression Operator=Greater
+            Left: Identifier Name="n"
+            Right: NumberLiteral Value=0 RawText="0"

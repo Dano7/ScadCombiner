@@ -395,10 +395,18 @@ public sealed class Parser
         return Spanned(new Parameter(name.Text, null), name);
     }
 
-    private List<Argument> ParseArgumentList()
+    private List<Argument> ParseArgumentList() => ParseArgumentList(allowSemicolonTerminator: false);
+
+    /// <summary>
+    /// Parses a comma-separated argument list ending at <c>)</c>. When
+    /// <paramref name="allowSemicolonTerminator"/> is set, a <c>;</c> also terminates the list without
+    /// error — this is the C-style <c>for</c> form <c>for (init; cond; update)</c> (§6), where the
+    /// init/update lists are <c>arguments</c> separated by <c>;</c>.
+    /// </summary>
+    private List<Argument> ParseArgumentList(bool allowSemicolonTerminator)
     {
         var arguments = new List<Argument>();
-        if (_cursor.Check(TokenKind.RParen))
+        if (IsArgumentListEnd(allowSemicolonTerminator))
         {
             return arguments;
         }
@@ -409,7 +417,7 @@ public sealed class Parser
             if (_cursor.Check(TokenKind.Comma))
             {
                 _cursor.Advance();
-                if (_cursor.Check(TokenKind.RParen))
+                if (IsArgumentListEnd(allowSemicolonTerminator))
                 {
                     break; // trailing comma
                 }
@@ -417,7 +425,7 @@ public sealed class Parser
                 continue;
             }
 
-            if (!_cursor.Check(TokenKind.RParen))
+            if (!IsArgumentListEnd(allowSemicolonTerminator))
             {
                 Report(DiagnosticCode.InvalidArgumentList, "Invalid argument list.", _cursor.Current.Span);
                 SkipMalformedList();
@@ -428,6 +436,10 @@ public sealed class Parser
 
         return arguments;
     }
+
+    private bool IsArgumentListEnd(bool allowSemicolonTerminator) =>
+        _cursor.Check(TokenKind.RParen)
+        || (allowSemicolonTerminator && _cursor.Check(TokenKind.Semicolon));
 
     private Argument ParseArgument()
     {
@@ -457,7 +469,31 @@ public sealed class Parser
     // Expressions (precedence climbing)
     // ---------------------------------------------------------------------------------------------
 
+    /// <summary>
+    /// Parses an <c>expr</c>. The keyword-prefixed forms (<c>function</c>/<c>let</c>/<c>assert</c>/
+    /// <c>echo</c>) are dispatched here, <b>before</b> the ternary/binary cascade, because the grammar
+    /// places them at the top of <c>expr</c> (outside <c>logic_or</c>) — so they may start an
+    /// expression but never appear as a binary operand or a ternary condition. Their bodies are
+    /// right-greedy (parsed via <see cref="ParseExpression"/>), matching <c>parser.y</c>.
+    /// </summary>
     private Expression ParseExpression()
+    {
+        switch (_cursor.Kind)
+        {
+            case TokenKind.Function:
+                return ParseFunctionLiteral();
+            case TokenKind.Let:
+                return ParseLetExpression();
+            case TokenKind.Assert:
+                return ParseAssertExpression();
+            case TokenKind.Echo:
+                return ParseEchoExpression();
+            default:
+                return ParseTernary();
+        }
+    }
+
+    private Expression ParseTernary()
     {
         Token start = _cursor.Current;
         Expression condition = ParseBinary(0);
@@ -472,6 +508,57 @@ public sealed class Parser
 
         return condition;
     }
+
+    private FunctionLiteral ParseFunctionLiteral()
+    {
+        Token keyword = _cursor.Advance(); // 'function'
+        ExpectLParen();
+        IReadOnlyList<Parameter> parameters = ParseParameterList();
+        ExpectRParen();
+        Expression body = ParseExpression();
+        return Composite(new FunctionLiteral(parameters, body), keyword);
+    }
+
+    private LetExpression ParseLetExpression()
+    {
+        Token keyword = _cursor.Advance(); // 'let'
+        ExpectLParen();
+        IReadOnlyList<Argument> arguments = ParseArgumentList();
+        ExpectRParen();
+        Expression body = ParseExpression();
+        return Composite(new LetExpression(ToBindings(arguments), body), keyword);
+    }
+
+    private AssertExpression ParseAssertExpression()
+    {
+        Token keyword = _cursor.Advance(); // 'assert'
+        ExpectLParen();
+        IReadOnlyList<Argument> arguments = ParseArgumentList();
+        ExpectRParen();
+        Expression? body = CanStartExpression(_cursor.Kind) ? ParseExpression() : null;
+        return Composite(new AssertExpression(arguments, body), keyword);
+    }
+
+    private EchoExpression ParseEchoExpression()
+    {
+        Token keyword = _cursor.Advance(); // 'echo'
+        ExpectLParen();
+        IReadOnlyList<Argument> arguments = ParseArgumentList();
+        ExpectRParen();
+        Expression? body = CanStartExpression(_cursor.Kind) ? ParseExpression() : null;
+        return Composite(new EchoExpression(arguments, body), keyword);
+    }
+
+    /// <summary>
+    /// The first-set of <c>expr</c>, used to decide whether an <c>assert</c>/<c>echo</c> has a
+    /// trailing body (grammar <c>expr_or_empty</c>). A body is present iff the next token can start an
+    /// expression; closers/separators (<c>;</c>, <c>,</c>, <c>)</c>, <c>]</c>, <c>}</c>, EOF) mean none.
+    /// </summary>
+    private static bool CanStartExpression(TokenKind kind) => kind is
+        TokenKind.Number or TokenKind.String or TokenKind.True or TokenKind.False
+        or TokenKind.Undef or TokenKind.Identifier or TokenKind.LParen or TokenKind.LBracket
+        or TokenKind.Minus or TokenKind.Plus or TokenKind.Not or TokenKind.Tilde
+        or TokenKind.Let or TokenKind.Assert or TokenKind.Echo or TokenKind.Function;
 
     private Expression ParseBinary(int minBindingPower)
     {
@@ -605,7 +692,10 @@ public sealed class Parser
             return Leaf(new VectorExpression([]), open);
         }
 
-        Expression first = ParseExpression();
+        Expression first = ParseVectorElement();
+
+        // A range start is an `expr`; a `:` after the first element means this is a range, not a
+        // vector. Comprehension generators never precede `:`, so detecting `:` here is unambiguous.
         if (_cursor.Check(TokenKind.Colon))
         {
             _cursor.Advance();
@@ -631,12 +721,136 @@ public sealed class Parser
                 break; // trailing comma
             }
 
-            elements.Add(ParseExpression());
+            elements.Add(ParseVectorElement());
         }
 
         ExpectRBracket();
         return Leaf(new VectorExpression(elements), open);
     }
+
+    // ---------------------------------------------------------------------------------------------
+    // Vector elements & list-comprehension generators (Slice 3 §5–§6)
+    // ---------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Parses a single <c>vector_element</c>: a list-comprehension generator (<c>for</c>, C-style
+    /// <c>for</c>, <c>if</c>, <c>each</c>, <c>let</c>-comprehension) or — for any other lead — a plain
+    /// <see cref="ParseExpression"/>. Generators are valid only inside <c>[ … ]</c>, so they live here
+    /// and never in <see cref="ParseExpression"/>. Bodies recurse through this method, enabling
+    /// chaining (<c>for(i) for(j) e</c>, <c>for(i) if(c) e</c>).
+    /// </summary>
+    private Expression ParseVectorElement()
+    {
+        switch (_cursor.Kind)
+        {
+            case TokenKind.For:
+                return ParseForComprehension();
+            case TokenKind.Each:
+                return ParseEachComprehension();
+            case TokenKind.If:
+                return ParseIfComprehension();
+            case TokenKind.Let:
+                return ParseLetVectorElement();
+
+            // `( for/each/if … )` is a parenthesized generator (grammar
+            // `list_comprehension_elements_p`). `( let … )` and `( expr )` stay on the normal
+            // expression path so postfix application — e.g. `(function(x) x)(5)` — still works.
+            case TokenKind.LParen when _cursor.Peek().Kind
+                is TokenKind.For or TokenKind.Each or TokenKind.If:
+                return ParseParenthesizedGenerator();
+
+            default:
+                return ParseExpression();
+        }
+    }
+
+    /// <summary>Parses <c>for ( arguments ) body</c> or the C-style <c>for ( init; cond; update ) body</c> (§6).</summary>
+    private Expression ParseForComprehension()
+    {
+        Token keyword = _cursor.Advance(); // 'for'
+        ExpectLParen();
+        IReadOnlyList<Argument> first = ParseArgumentList(allowSemicolonTerminator: true);
+        if (_cursor.Check(TokenKind.Semicolon))
+        {
+            _cursor.Advance();
+            Expression condition = ParseExpression();
+            ExpectSemicolon("for-comprehension condition");
+            IReadOnlyList<Argument> update = ParseArgumentList();
+            ExpectRParen();
+            Expression cBody = ParseVectorElement();
+            return Composite(
+                new ForCComprehension(ToBindings(first), condition, ToBindings(update), cBody),
+                keyword);
+        }
+
+        ExpectRParen();
+        Expression body = ParseVectorElement();
+        return Composite(new ForComprehension(ToBindings(first), body), keyword);
+    }
+
+    /// <summary>Parses <c>each vector_element</c>.</summary>
+    private EachExpression ParseEachComprehension()
+    {
+        Token keyword = _cursor.Advance(); // 'each'
+        Expression value = ParseVectorElement();
+        return Composite(new EachExpression(value), keyword);
+    }
+
+    /// <summary>Parses <c>if ( expr ) then [ else else ]</c> as a comprehension (filter when no else).</summary>
+    private IfComprehension ParseIfComprehension()
+    {
+        Token keyword = _cursor.Advance(); // 'if'
+        ExpectLParen();
+        Expression condition = ParseExpression();
+        ExpectRParen();
+        Expression then = ParseVectorElement();
+        Expression? elseValue = null;
+        if (_cursor.Check(TokenKind.Else))
+        {
+            _cursor.Advance();
+            elseValue = ParseVectorElement();
+        }
+
+        return Composite(new IfComprehension(condition, then, elseValue), keyword);
+    }
+
+    /// <summary>
+    /// Parses <c>let ( arguments ) body</c> in vector-element position, resolving the trailing-<c>let</c>
+    /// ambiguity (§5): if the body is a generator the result is a <see cref="LetComprehension"/>;
+    /// if it is an ordinary value it is a <see cref="LetExpression"/> element.
+    /// </summary>
+    private Expression ParseLetVectorElement()
+    {
+        Token keyword = _cursor.Advance(); // 'let'
+        ExpectLParen();
+        IReadOnlyList<Argument> arguments = ParseArgumentList();
+        ExpectRParen();
+        List<Binding> bindings = ToBindings(arguments);
+        Expression body = ParseVectorElement();
+        return IsComprehensionGenerator(body)
+            ? Composite(new LetComprehension(bindings, body), keyword)
+            : Composite(new LetExpression(bindings, body), keyword);
+    }
+
+    /// <summary>Parses <c>( generator )</c>, preserving the author's parentheses around a generator.</summary>
+    private ParenthesizedExpression ParseParenthesizedGenerator()
+    {
+        Token open = _cursor.Advance(); // '('
+        Expression inner = ParseVectorElement();
+        ExpectRParen();
+        return Leaf(new ParenthesizedExpression(inner), open);
+    }
+
+    /// <summary>
+    /// True when <paramref name="expression"/> is a comprehension generator (seeing through a single
+    /// layer of author parentheses), used by the trailing-<c>let</c> rule.
+    /// </summary>
+    private static bool IsComprehensionGenerator(Expression expression) => expression switch
+    {
+        ForComprehension or ForCComprehension or IfComprehension or LetComprehension or EachExpression => true,
+        ParenthesizedExpression parenthesized => IsComprehensionGenerator(parenthesized.Inner),
+        _ => false,
+    };
 
     private static bool TryBinaryOperator(TokenKind kind, out BinaryOperator op, out int leftBindingPower)
     {

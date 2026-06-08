@@ -1,0 +1,17 @@
+ScadFile
+  AssignmentStatement Name="xs"
+    Value: VectorExpression
+      Elements:
+        ForCComprehension
+          Init:
+            Binding Name="i"
+              Value: NumberLiteral Value=0 RawText="0"
+          Condition: BinaryExpression Operator=Less
+            Left: Identifier Name="i"
+            Right: NumberLiteral Value=5 RawText="5"
+          Update:
+            Binding Name="i"
+              Value: BinaryExpression Operator=Add
+                Left: Identifier Name="i"
+                Right: NumberLiteral Value=1 RawText="1"
+          Body: Identifier Name="i"

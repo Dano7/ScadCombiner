@@ -68,6 +68,7 @@ ParseVectorElement():
     Let   -> Let '(' arguments ')' body=ParseVectorElement()      # ambiguity, below
              body is a generator?  -> LetComprehension(bindings, body)
              else (body is an expr) -> LetExpression(bindings, body)
+    '(' followed by For/Each/If -> ParseParenthesizedGenerator()  # '(' generator ')', below
     _     -> ParseExpr()                        # §4 forms + Slice 2 cascade
 ```
 
@@ -77,7 +78,7 @@ Ranges (`[a:b]`/`[a:b:c]`) are still detected first by the vector/range parser (
 
 **The trailing-`let` rule** (grammar: *"the last set element may not be a `let`, as that would be parsed as an expression"*): after `let (args)`, parse the body as a vector element; if the body is a comprehension generator (`For`/`ForC`/`If`/`Let`/`Each` node) → **`LetComprehension`**; if it's an ordinary expression → **`LetExpression`**. Thus `[let(a=1) a]` → `VectorExpression[ LetExpression ]`, but `[let(a=1) for(i=…) a]` → `VectorExpression[ LetComprehension ]`.
 
-**Parenthesized generators**: `( generator )` inside a comprehension body is grouping — parse and wrap as `ParenthesizedExpression(generator)` (preserves the author's parens; generators are `Expression`s in our model).
+**Parenthesized generators**: `( generator )` inside a comprehension body is grouping — parse and wrap as `ParenthesizedExpression(generator)` (preserves the author's parens; generators are `Expression`s in our model). A `(` is taken as a parenthesized generator only when it is immediately followed by `For`/`Each`/`If` (tokens that can never begin an `expr`); a `(` followed by anything else — including `let` and `function` — stays on the ordinary expression path so postfix application still binds (e.g. `(function (x) x)(5)`). One consequence: the trailing-`let` test (`IsComprehensionGenerator`) unwraps a single `ParenthesizedExpression` layer, so `[let(n) (for(i=…) …)]` is still a `LetComprehension`. A *parenthesized* `let`-comprehension as a top-level element (`[ (let(a=1) for(…) …) ]`) is the lone construct this lookahead does not reach — vanishingly rare, and a semantic error anyway when it surfaces outside a generator body.
 
 ---
 

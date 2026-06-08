@@ -1,0 +1,21 @@
+ScadFile
+  AssignmentStatement Name="squares"
+    Value: VectorExpression
+      Elements:
+        ForComprehension
+          Bindings:
+            Binding Name="i"
+              Value: RangeExpression
+                Start: NumberLiteral Value=0 RawText="0"
+                Step: null
+                End: NumberLiteral Value=5 RawText="5"
+          Body: IfComprehension
+            Condition: BinaryExpression Operator=Equal
+              Left: BinaryExpression Operator=Modulo
+                Left: Identifier Name="i"
+                Right: NumberLiteral Value=2 RawText="2"
+              Right: NumberLiteral Value=0 RawText="0"
+            Then: BinaryExpression Operator=Multiply
+              Left: Identifier Name="i"
+              Right: Identifier Name="i"
+            Else: null

@@ -1,0 +1,27 @@
+ScadFile
+  AssignmentStatement Name="pts"
+    Value: VectorExpression
+      Elements:
+        ForComprehension
+          Bindings:
+            Binding Name="i"
+              Value: RangeExpression
+                Start: NumberLiteral Value=0 RawText="0"
+                Step: null
+                End: NumberLiteral Value=2 RawText="2"
+            Binding Name="a"
+              Value: BinaryExpression Operator=Multiply
+                Left: Identifier Name="i"
+                Right: NumberLiteral Value=90 RawText="90"
+          Body: VectorExpression
+            Elements:
+              FunctionCallExpression
+                Callee: Identifier Name="cos"
+                Arguments:
+                  Argument
+                    Value: Identifier Name="a"
+              FunctionCallExpression
+                Callee: Identifier Name="sin"
+                Arguments:
+                  Argument
+                    Value: Identifier Name="a"

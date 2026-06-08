@@ -1,0 +1,8 @@
+ScadFile
+  AssignmentStatement Name="dbl"
+    Value: FunctionLiteral
+      Parameters:
+        Parameter Name="x"
+      Body: BinaryExpression Operator=Multiply
+        Left: Identifier Name="x"
+        Right: NumberLiteral Value=2 RawText="2"
