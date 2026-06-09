@@ -109,9 +109,10 @@ public sealed class Slice5EdgeCoverageTests
             ("b.scad", "include <common.scad>\nmodule bm() shared();"),
             ("common.scad", "module shared() cube(1);"));
 
-        Assert.Single(bundled.Statements.OfType<ModuleDefinition>(), m => m.Name == "shared");
-        Assert.Contains("am", BundleHelper.TopLevelDeclarationNames(bundled));
-        Assert.Contains("bm", BundleHelper.TopLevelDeclarationNames(bundled));
+        // Always-namespaced use-imports: each library's symbols carry its file stem.
+        Assert.Single(bundled.Statements.OfType<ModuleDefinition>(), m => m.Name == "common__shared");
+        Assert.Contains("a__am", BundleHelper.TopLevelDeclarationNames(bundled));
+        Assert.Contains("b__bm", BundleHelper.TopLevelDeclarationNames(bundled));
     }
 
     [Fact]
@@ -144,7 +145,7 @@ public sealed class Slice5EdgeCoverageTests
             ("main.scad", "use <lib.scad>\nx = f();"),
             ("lib.scad", "function f() = 1;"));
 
-        Assert.Contains(bundled.Statements, s => s is FunctionDefinition { Name: "f" });
+        Assert.Contains(bundled.Statements, s => s is FunctionDefinition { Name: "lib__f" });
     }
 
     [Fact]

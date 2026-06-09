@@ -1,0 +1,2 @@
+SB5004 WARNING a.scad:1:1 'helper' from 'a.scad' renamed to 'a__helper' to resolve a collision.
+SB5004 WARNING b.scad:1:1 'helper' from 'b.scad' renamed to 'b__helper' to resolve a collision.

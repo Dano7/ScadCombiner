@@ -1,6 +1,6 @@
 # ADR 0001 — `include`/`use` scoping and the identifier-namespacing policy
 
-- **Status:** Accepted — 2026-06-09
+- **Status:** Accepted — 2026-06-09 · **Implemented** (Decision 2, always-namespace `use`) — 2026-06-09
 - **Deciders:** Dan Olsen (power-user demo feedback) + Claude
 - **Supersedes/affects:** the framing of "Item C" in [Post-Demo-Plan.md](../Post-Demo-Plan.md); informs
   [Post-v1-Plan.md](../Post-v1-Plan.md) #4.
@@ -84,8 +84,14 @@ verified in the OpenSCAD source (`C:\git\hub\openscad`, `openscad-2019.05-3933-g
 
 ## Implementation pointers
 
-- `use` always-namespace: route every non-`Protected` `use`-origin candidate through `NamespaceRep` in
-  [Inliner.cs](../../src/ScadBundler.Core/Inlining/Inliner.cs) `ResolveAuto`/`ResolveCollisions`
-  (today only colliding groups are namespaced). Keep `$`-vars and include-origin defs untouched. Plan +
-  tests: [Post-Demo-Plan.md](../Post-Demo-Plan.md) Item C.
-- #4 mis-bind: repro-first, per [Post-v1-Plan.md](../Post-v1-Plan.md) #4.
+- `use` always-namespace: **done (2026-06-09).** The singleton path in
+  [Inliner.cs](../../src/ScadBundler.Core/Inlining/Inliner.cs) `ResolveGroup` now routes every
+  non-`Protected` `use`-origin candidate through `NamespaceRep` (not only colliding groups). A
+  non-clashing import is namespaced **silently** (`report: false` → no SB5004; it would otherwise fire
+  per library symbol); genuine clashes still warn via the collision paths (`ResolveAuto`/`ResolvePrefix`).
+  `$`-vars are never candidates (the analyzer never records them) and include-origin defs are untouched.
+  Tests: `B002`/`UseImport_NoCollision_IsNamespacedForIsolation`/`TwoUsedLibraries_PrivateHelpers_StayIsolated`/
+  `OwnDefinition_ShadowsUsedLibrary_OfSameName`; goldens `slice5-bundle/B-002` (re-blessed) and
+  `B-009-use-isolation`.
+- #4 mis-bind: **done (2026-06-09)** — the prerequisite reference-rewrite fix; see
+  [Post-v1-Plan.md](../Post-v1-Plan.md) #4 "Resolved".

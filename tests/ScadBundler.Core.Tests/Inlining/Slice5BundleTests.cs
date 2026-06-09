@@ -37,15 +37,16 @@ public sealed class Slice5BundleTests
             ("main.scad", "use <lib.scad>\nbox();"),
             ("lib.scad", "$fn = 64;\nWALL = 2;\nUNUSED = 5;\nmodule box() cube(WALL);\ncube(99);"));
 
+        // `use`-imports are namespaced by construction (ADR 0001), so WALL/box become lib__WALL/lib__box.
         IReadOnlyList<string> names = BundleHelper.TopLevelDeclarationNames(bundled);
-        Assert.Contains("WALL", names);             // referenced by box → carried as private constant
-        Assert.Contains("box", names);
+        Assert.Contains("lib__WALL", names);        // referenced by box → carried as private constant
+        Assert.Contains("lib__box", names);
         Assert.DoesNotContain("$fn", names);        // top-level special var dropped
         Assert.DoesNotContain("UNUSED", names);     // unreferenced var dropped
-        Assert.Contains(bundled.Statements, s => s is ModuleInstantiation { Name: "box" });
+        Assert.Contains(bundled.Statements, s => s is ModuleInstantiation { Name: "lib__box" });
         Assert.DoesNotContain(bundled.Statements, s => s is UseStatement);
         Assert.DoesNotContain(SemanticHelper.Descendants(bundled), n => n is NumberLiteral { Value: 99 }); // cube(99) dropped
-        Assert.Empty(diagnostics);
+        Assert.Empty(diagnostics); // a non-clashing use-import is namespaced silently
     }
 
     [Fact]
@@ -332,14 +333,20 @@ public sealed class Slice5BundleTests
     }
 
     [Fact]
-    public void UseImport_NoCollision_KeepsOriginalName()
+    public void UseImport_NoCollision_IsNamespacedForIsolation()
     {
+        // ADR 0001: OpenSCAD evaluates a `use`d library in its own FileContext, so every imported symbol
+        // is namespaced by construction — even with no clash — and the call site is rewritten to match.
+        // The rename is silent (SB5004 would otherwise fire for every library symbol).
         var (bundled, diagnostics) = BundleHelper.Bundle(
             null,
             ("main.scad", "use <lib.scad>\nbox();"),
             ("lib.scad", "module box() cube(1);"));
 
-        Assert.Contains("box", BundleHelper.TopLevelDeclarationNames(bundled));
+        IReadOnlyList<string> names = BundleHelper.TopLevelDeclarationNames(bundled);
+        Assert.Contains("lib__box", names);
+        Assert.DoesNotContain("box", names);
+        Assert.Contains(bundled.Statements, s => s is ModuleInstantiation { Name: "lib__box" });
         Assert.DoesNotContain(diagnostics, d => d.Code == DiagnosticCode.NameRenamed);
     }
 
@@ -414,11 +421,52 @@ public sealed class Slice5BundleTests
         Assert.Contains("WALL", BundleHelper.TopLevelDeclarationNames(bundled));     // root's WALL survives
         Assert.Contains(diagnostics, d => d.Code == DiagnosticCode.NameRenamed);     // library WALL namespaced
 
-        var box = bundled.Statements.OfType<ModuleDefinition>().Single(m => m.Name == "box");
+        var box = bundled.Statements.OfType<ModuleDefinition>().Single(m => m.Name == "lib__box");
         var cubeArg = Assert.IsType<Identifier>(((ModuleInstantiation)box.Body).Arguments[0].Value);
         Assert.StartsWith("lib__WALL", cubeArg.Name); // box's reference rewritten to the namespaced constant
 
         var rootWall = bundled.Statements.OfType<AssignmentStatement>().Single(a => a.Name == "WALL");
         Assert.True(rootWall.Value is NumberLiteral { Value: 99 }); // root's WALL is the unmodified 99
+    }
+
+    [Fact]
+    public void TwoUsedLibraries_PrivateHelpers_StayIsolated()
+    {
+        // The isolation case a naive concatenator breaks: two `use`d libraries each define a private
+        // `helper()` they call internally. Always-namespacing keeps each library's call bound to its own
+        // helper (a__foo→a__helper, b__bar→b__helper), exactly as OpenSCAD's per-file FileContext would.
+        var (bundled, _) = BundleHelper.Bundle(
+            null,
+            ("main.scad", "use <a.scad>\nuse <b.scad>\nfoo();\nbar();"),
+            ("a.scad", "module helper() cube(1);\nmodule foo() helper();"),
+            ("b.scad", "module helper() sphere(1);\nmodule bar() helper();"));
+
+        var foo = bundled.Statements.OfType<ModuleDefinition>().Single(m => m.Name == "a__foo");
+        Assert.Equal("a__helper", ((ModuleInstantiation)foo.Body).Name);
+
+        var bar = bundled.Statements.OfType<ModuleDefinition>().Single(m => m.Name == "b__bar");
+        Assert.Equal("b__helper", ((ModuleInstantiation)bar.Body).Name);
+
+        // The root's own calls rebind to each library's namespaced entry point.
+        Assert.Contains(bundled.Statements, s => s is ModuleInstantiation { Name: "a__foo" });
+        Assert.Contains(bundled.Statements, s => s is ModuleInstantiation { Name: "b__bar" });
+    }
+
+    [Fact]
+    public void OwnDefinition_ShadowsUsedLibrary_OfSameName()
+    {
+        // OpenSCAD checks own scope before used libraries (ScopeContext.cc), so the root's own `widget`
+        // wins. The used library's `widget` is namespaced out of the way; the call keeps binding to root.
+        var (bundled, _) = BundleHelper.Bundle(
+            null,
+            ("main.scad", "module widget() cube(9);\nuse <lib.scad>\nwidget();"),
+            ("lib.scad", "module widget() sphere(1);"));
+
+        var rootWidget = bundled.Statements.OfType<ModuleDefinition>().Single(m => m.Name == "widget");
+        Assert.True(rootWidget.Body is ModuleInstantiation { Name: "cube" }); // root's definition survives unrenamed
+        Assert.Contains("lib__widget", BundleHelper.TopLevelDeclarationNames(bundled));
+
+        var call = Assert.Single(bundled.Statements.OfType<ModuleInstantiation>(), m => m.Name is "widget" or "lib__widget");
+        Assert.Equal("widget", call.Name); // bound to the root's own definition
     }
 }

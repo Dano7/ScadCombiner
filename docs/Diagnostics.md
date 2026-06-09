@@ -107,9 +107,10 @@ A list-comprehension generator (`for` / `if` / `let` / `each` in their comprehen
 - **Message**: `'{name}' is deprecated in OpenSCAD; preserved unchanged. Consider migrating to its modern equivalent.`
 
 ### SB5004 — Name renamed to resolve collision *(Warning, Inliner)*
-- **Trigger**: a definition (or its private constant) is renamed/namespaced to resolve a cross-file collision (default for `use`-imported names; or any origin under `--on-collision prefix`).
-- **Action**: rename + rewrite all bound references.
+- **Trigger**: a definition (or its private constant) is renamed/namespaced **and the rename is noteworthy** — i.e. it resolves a genuine cross-file clash: two `use`d libraries (or a `use`d name and a `use`d name) sharing a symbol, a `use`d name clashing with an own/included name, or any origin under `--on-collision prefix`.
+- **Action**: rename to `<filestem>__name` + rewrite all bound references.
 - **Message**: `'{name}' from '{file}' renamed to '{newname}' to resolve a collision.`
+- **Notes**: every `use`-imported symbol is namespaced **by construction** (ADR 0001 — OpenSCAD evaluates a `use`d library in its own `FileContext`, so it is always isolated). When the import does **not** clash with anything, that by-construction namespacing is performed **silently** (no SB5004) — otherwise the code would fire once per library symbol (e.g. for every name in `use <BOSL2/std.scad>`). `include`-origin definitions are never namespaced (flat last-wins) and `$`-special variables are never namespaced (dynamic scope) or imported.
 
 ### SB5005 — Duplicate definition deduplicated *(Info, Inliner)*
 - **Trigger**: structurally-identical definitions (same kind/name/params/body, ignoring spans & trivia) arrive via multiple include/use paths (e.g. a diamond include).

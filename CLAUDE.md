@@ -50,7 +50,7 @@ SourceLoader → Lexer → Parser → SemanticAnalyzer → Inliner → Emitter
 ## Key Design Decisions
 
 - **`include` vs `use`**: `include` brings in all definitions AND executes top-level calls; `use` imports only modules/functions. The bundler must replicate this semantic distinction.
-- **Collision resolution**: origin-dependent by default — `include` duplicates are last-wins (matches OpenSCAD), `use`-imported names are namespace-prefixed to preserve library isolation; configurable via `--on-collision`.
+- **Collision resolution**: origin-dependent by default — `include` duplicates are last-wins (matches OpenSCAD), `use`-imported names are **always** namespace-prefixed (`<filestem>__name`) by construction to preserve library isolation (per-file `FileContext`; see [ADR 0001](docs/adr/0001-include-use-scoping-and-namespacing.md)), not only on a detected clash; configurable via `--on-collision`.
 - **Customizer support**: Special handling for `/* [ Section ] */` comment blocks and `// [min:max:step]` parameter annotations.
 - **Web-ready**: Core library should be consumable via WASM/JSON API to power a future "ScadBundler Live" web companion.
 

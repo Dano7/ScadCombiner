@@ -1,4 +1,4 @@
 /* [Hidden] */
-WALL = 2;
-module box() cube(WALL);
-box();
+lib__WALL = 2;
+module lib__box() cube(lib__WALL);
+lib__box();
