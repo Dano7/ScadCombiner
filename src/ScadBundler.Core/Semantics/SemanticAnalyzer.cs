@@ -631,26 +631,12 @@ public sealed class SemanticAnalyzer
         return false;
     }
 
-    /// <summary>Looks a name up in the file's own scope then its <c>include</c>-merged scopes (the
-    /// merged file scope). Used libraries are NOT consulted here — variables are never imported by
-    /// <c>use</c>, and call resolution checks built-ins before used libraries.</summary>
-    private Symbol? LookupOwnOrIncluded(string name, Kind kind)
-    {
-        if (Table(_currentEnv.Own, kind).TryGetValue(name, out Symbol? own))
-        {
-            return own;
-        }
-
-        foreach (FileScope included in _currentEnv.Included)
-        {
-            if (Table(included, kind).TryGetValue(name, out Symbol? symbol))
-            {
-                return symbol;
-            }
-        }
-
-        return null;
-    }
+    /// <summary>Looks a name up in the file's flat <c>include</c>-merged scope: own declarations plus
+    /// every <c>include</c>d file's declarations, last-wins by document order (see
+    /// <see cref="BuildMergedScope"/>). Used libraries are NOT consulted here — variables are never
+    /// imported by <c>use</c>, and call resolution checks built-ins before used libraries.</summary>
+    private Symbol? LookupOwnOrIncluded(string name, Kind kind) =>
+        Table(_currentEnv.Merged, kind).GetValueOrDefault(name);
 
     private Symbol? LookupUsedDefinition(string name, Kind kind)
     {
@@ -766,47 +752,68 @@ public sealed class SemanticAnalyzer
 
         return new FileEnvironment
         {
-            Own = _scopes[file.Source],
-            Included = IncludeClosure(file),
+            Merged = BuildMergedScope(file),
             Used = used,
             Complete = IsComplete(file),
         };
     }
 
-    private List<FileScope> IncludeClosure(LoadedFile file)
+    /// <summary>Builds the file's flat <c>include</c>-merged scope in OpenSCAD document order: each
+    /// file's own top-level declarations interleaved with its <c>include</c>d files' declarations,
+    /// spliced in at the include's position, recursively. Because later declarations overwrite earlier
+    /// ones (<c>LocalScope.cc</c> flat-scope last-wins), inserting in document order leaves each name
+    /// bound to its <i>last</i> definition — the same ordering the inliner's reference rewriter relies
+    /// on (<see cref="Inlining.Inliner"/> flattens includes identically).</summary>
+    private static FileScope BuildMergedScope(LoadedFile file)
     {
-        var result = new List<FileScope>();
-        var visited = new HashSet<SourceFile> { file.Source };
-        var queue = new Queue<LoadedFile>();
-        EnqueueIncludes(file, queue);
-        while (queue.Count > 0)
-        {
-            LoadedFile included = queue.Dequeue();
-            if (!visited.Add(included.Source))
-            {
-                continue;
-            }
-
-            if (_scopes.TryGetValue(included.Source, out FileScope? scope))
-            {
-                result.Add(scope);
-            }
-
-            EnqueueIncludes(included, queue);
-        }
-
-        return result;
+        var merged = new FileScope();
+        AppendDeclarations(file, merged, []);
+        return merged;
     }
 
-    private static void EnqueueIncludes(LoadedFile file, Queue<LoadedFile> queue)
+    private static void AppendDeclarations(LoadedFile file, FileScope merged, HashSet<SourceFile> stack)
     {
-        foreach (IncludeEdge edge in file.Includes)
+        if (!stack.Add(file.Source))
         {
-            if (edge.Target is not null)
+            return; // defensive: never recurse a file already on the splice stack (include cycle)
+        }
+
+        Dictionary<IncludeStatement, LoadedFile?> targets = IncludeTargets(file);
+        foreach (Statement statement in file.Ast.Statements)
+        {
+            switch (statement)
             {
-                queue.Enqueue(edge.Target);
+                case IncludeStatement include:
+                    if (targets.TryGetValue(include, out LoadedFile? target) && target is not null)
+                    {
+                        AppendDeclarations(target, merged, stack);
+                    }
+
+                    break;
+                case ModuleDefinition module:
+                    merged.Modules[module.Name] = new Symbol(SymbolKind.Module, module.Name, file.Source, module);
+                    break;
+                case FunctionDefinition function:
+                    merged.Functions[function.Name] = new Symbol(SymbolKind.Function, function.Name, file.Source, function);
+                    break;
+                case AssignmentStatement assignment:
+                    merged.Variables[assignment.Name] = new Symbol(SymbolKind.Variable, assignment.Name, file.Source, assignment);
+                    break;
             }
         }
+
+        stack.Remove(file.Source);
+    }
+
+    private static Dictionary<IncludeStatement, LoadedFile?> IncludeTargets(LoadedFile file)
+    {
+        var map = new Dictionary<IncludeStatement, LoadedFile?>(ReferenceEqualityComparer.Instance);
+        foreach (IncludeEdge edge in file.Includes)
+        {
+            map[edge.Statement] = edge.Target;
+        }
+
+        return map;
     }
 
     /// <summary>True when <paramref name="file"/> and every file in its <c>include</c>-closure have all
@@ -955,15 +962,14 @@ public sealed class SemanticAnalyzer
     {
         public static readonly FileEnvironment Empty = new()
         {
-            Own = new FileScope(),
-            Included = [],
+            Merged = new FileScope(),
             Used = [],
             Complete = false,
         };
 
-        public required FileScope Own { get; init; }
-
-        public required IReadOnlyList<FileScope> Included { get; init; }
+        /// <summary>The flat <c>include</c>-merged scope: own + every <c>include</c>d file's
+        /// declarations, last-wins by document order (see <see cref="BuildMergedScope"/>).</summary>
+        public required FileScope Merged { get; init; }
 
         public required IReadOnlyList<FileScope> Used { get; init; }
 

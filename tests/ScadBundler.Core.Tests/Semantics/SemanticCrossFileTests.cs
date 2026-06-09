@@ -133,6 +133,40 @@ public sealed class SemanticCrossFileTests
     }
 
     [Fact]
+    public void Include_DuplicateAcrossIncludes_BindsToLaterInclude()
+    {
+        // `include` is flat-scope last-wins (LocalScope.cc / corpus B-007): when two included files
+        // define `part`, a reference binds to the later include, not the earlier one.
+        var (graph, result) = SemanticHelper.AnalyzeGraph(
+            ("main.scad", "include <a.scad>\ninclude <b.scad>\npart();"),
+            ("a.scad", "module part() cube(1);"),
+            ("b.scad", "module part() sphere(1);"));
+        LoadedFile b = graph.ByAbsolutePath["b.scad"];
+        var call = (ModuleInstantiation)graph.Root.Ast.Statements[2];
+
+        Symbol? symbol = result.Model.Resolve(call);
+        Assert.NotNull(symbol);
+        Assert.Same(b.Ast.Statements[0], symbol.Declaration); // the later include wins
+        Assert.Equal(b.Source, symbol.File);
+    }
+
+    [Fact]
+    public void Include_AfterOwnDefinition_OverridesItByDocumentOrder()
+    {
+        // The include sits after main's own `part`, so in flattened document order the included `part`
+        // is the later definition and wins — own scope does not unconditionally shadow includes.
+        var (graph, result) = SemanticHelper.AnalyzeGraph(
+            ("main.scad", "module part() cube(1);\ninclude <a.scad>\npart();"),
+            ("a.scad", "module part() sphere(1);"));
+        LoadedFile a = graph.ByAbsolutePath["a.scad"];
+        var call = (ModuleInstantiation)graph.Root.Ast.Statements[2];
+
+        Symbol? symbol = result.Model.Resolve(call);
+        Assert.NotNull(symbol);
+        Assert.Same(a.Ast.Statements[0], symbol.Declaration); // later (included) definition wins
+    }
+
+    [Fact]
     public void FontUse_IsPassthrough_AndDoesNotBreakAnalysis()
     {
         var (_, result) = SemanticHelper.AnalyzeGraph(("main.scad", "use <Arial.ttf>\ncube(1);"));

@@ -190,6 +190,10 @@ public sealed class Slice5BundleTests
         Assert.Contains("b__part", names);
         Assert.DoesNotContain("part", names);
         Assert.Equal(2, diagnostics.Count(d => d.Code == DiagnosticCode.NameRenamed));
+
+        // The call binds to the later include (LocalScope.cc last-wins), so it rewrites to b's namespace.
+        var call = Assert.Single(bundled.Statements.OfType<ModuleInstantiation>());
+        Assert.Equal("b__part", call.Name);
     }
 
     [Fact]
