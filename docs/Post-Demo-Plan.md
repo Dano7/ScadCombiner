@@ -14,7 +14,7 @@ OpenSCAD ground truth, and gives a concrete plan with a recommended disposition.
 |---|------|------|--------|------|-------------|
 | A | **Main-file Customizer parameters preserved** | Correctness bug | M | Med | ✅ **Done** (this session) |
 | B | OpenSCAD-faithful search paths + `OPENSCADPATH` | Fidelity gap | S–M | Low | ✅ **Done** (this session) |
-| C | **Always-namespace `use` imports** (default) | Correctness/fidelity | M | Med | **Next session** (after #4) — see [ADR 0001](adr/0001-include-use-scoping-and-namespacing.md) |
+| C | **Always-namespace `use` imports** (default) | Correctness/fidelity | M | Med | ✅ **Done** (this session) — see [ADR 0001](adr/0001-include-use-scoping-and-namespacing.md) |
 | D | Obfuscator (`id_xxxxxx`) | Feature (opt-in) | M | Low | **Defer to vNext** |
 
 Items C and D both reuse the rename machinery and the **main-parameter exemption** that Item A
@@ -298,6 +298,24 @@ Item-A Customizer prologue.
 - **Risk / sequencing**: this reuses the same reference-rewrite path as the cross-`include` mis-bind
   (#4 below). Do **#4 first** (repro-first) so the rewrite is trustworthy, then this.
 
+### Implemented (this session)
+
+- [Inliner.cs](../src/ScadBundler.Core/Inlining/Inliner.cs): the singleton path in `ResolveGroup` now
+  namespaces every non-`Protected` `use`-origin candidate via `NamespaceRep` (not only colliding groups),
+  reusing the `RenameDeclaration`/reference-rewrite split introduced for #4. A non-clashing import is
+  namespaced **silently** (`report: false` → no SB5004; it would otherwise fire per library symbol);
+  genuine clashes still warn (`ResolveAuto`/`ResolvePrefix`). `$`-special variables are never `use`
+  candidates (the analyzer never records a reference to them, so `PrivateConstants` never reaches one),
+  and `include`-origin defs are left flat/last-wins.
+- **Diagnostics:** reuse **SB5004** (no new code); the by-construction case is suppressed, the clash case
+  stays a Warning. Catalog updated in [Diagnostics.md](Diagnostics.md).
+- **Tests:** `UseImport_NoCollision_IsNamespacedForIsolation` (was `…_KeepsOriginalName`),
+  `TwoUsedLibraries_PrivateHelpers_StayIsolated` (isolation), `OwnDefinition_ShadowsUsedLibrary_OfSameName`
+  (own-vs-used precedence); updated `B002`/`UsedLibrary_InternalReference_FollowsRenamedPrivateConstant`,
+  `Slice5EdgeCoverageTests` (`TransitiveUse…`, `Use_ImportsFunctionDefinition`), `BundlerTests`
+  (`Bundle_AppendsOpenScadPath…`), and CLI (`LibraryPath_ResolvesUsedLibrary`, `OpenScadPath_IsHonored`).
+  Goldens: re-blessed `slice5-bundle/B-002`; added `slice5-bundle/B-009-use-isolation`.
+
 ---
 
 ## D. Obfuscator (`id_xxxxxx`) — defer to vNext
@@ -334,9 +352,9 @@ addition.
 
 ## Recommended sequence
 
-1. ~~**A — Customizer parameters**~~ — ✅ done this session.
-2. ~~**B — Search-path fidelity**~~ — ✅ done this session.
-3. **[#4 — cross-`include` mis-bind]** ([Post-v1-Plan.md](Post-v1-Plan.md) #4) — repro-first; the one
-   place the bundler can mis-bind today, and a prerequisite for trustworthy reference rewriting in C.
-4. **C — always-namespace `use` imports** (default; [ADR 0001](adr/0001-include-use-scoping-and-namespacing.md)).
+1. ~~**A — Customizer parameters**~~ — ✅ done.
+2. ~~**B — Search-path fidelity**~~ — ✅ done.
+3. ~~**[#4 — cross-`include` mis-bind]**~~ ([Post-v1-Plan.md](Post-v1-Plan.md) #4) — ✅ done (prerequisite
+   for trustworthy reference rewriting in C).
+4. ~~**C — always-namespace `use` imports**~~ (default; [ADR 0001](adr/0001-include-use-scoping-and-namespacing.md)) — ✅ done this session.
 5. **D — Obfuscator** (vNext; deterministic ids; thin layer over C).

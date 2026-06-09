@@ -4,35 +4,50 @@ You are picking up **ScadBundler**, an AST-based OpenSCAD file bundler (C# / .NE
 
 ---
 
-## ▶ Next session — start here (in order)
+## ▶ Next session — start here
 
-Two correctness items, decided and planned this session. **Do them in this order** — the first is a
-prerequisite for the second (both touch the same `ISemanticModel.ReferencesTo` reference-rewrite path).
+The two correctness items that led this file are **both done** (see "Done this session" below). The
+remaining post-v1 work is now unblocked; pick the next one:
 
-1. **Fix the cross-`include` mis-bind under non-`Auto` strategies** — [Post-v1-Plan.md](docs/Post-v1-Plan.md) #4.
-   Repro-first; the one place the bundler can mis-bind today. Guard all `Auto`/`B-*` goldens. This makes
-   the reference rewrite trustworthy before #2 leans on it harder.
-2. **Always-namespace `use` imports (default)** — [Post-Demo-Plan.md](docs/Post-Demo-Plan.md) Item C,
-   decided in **[ADR 0001](docs/adr/0001-include-use-scoping-and-namespacing.md)**. Route every
-   non-`Protected` `use`-origin candidate through `NamespaceRep` (not just colliding ones); leave
-   `include`-origin defs and `$`-special-vars **untouched**. Update `UseImport_NoCollision_KeepsOriginalName`
-   and re-bless `slice5-bundle/B-002`; add the two-libs-with-private-`helper` isolation golden and an
-   own-vs-used precedence test.
+1. **License aggregation (`--bundle-licenses`)** — [Post-v1-Plan.md](docs/Post-v1-Plan.md) #2 (absorbs #3).
+   Additive, low-risk, user-visible: the flag is wired through the CLI but is a silent no-op today.
+   Collect + dedup each loaded file's leading license trivia and attach it to the first emitted statement,
+   gated on `_options.BundleLicenses`. Reserve **SB5007** if you add the Info marker (coordinate with the
+   note in [Post-Demo-Plan.md](docs/Post-Demo-Plan.md) §"Diagnostic codes").
+2. **Obfuscator (`--obfuscate`)** — [Post-Demo-Plan.md](docs/Post-Demo-Plan.md) Item D (**vNext**). Now a
+   thin layer over the always-namespace work: same candidate set + reference rewrite + prologue exemption,
+   only the name *generator* changes. Must use **deterministic** ids (a counter), never memory addresses
+   (those break goldens/idempotence).
+3. Broader post-v1: WASM/JSON API + "ScadBundler Live", real-world golden masters (BOSL2/NopSCADlib/
+   dotSCAD), the OpenSCAD integration harness (V1–V3), emitter line-length wrapping. See §"Post-v1 work".
+
+### Done this session
+
+1. **Cross-`include` mis-bind fixed** ([Post-v1-Plan.md](docs/Post-v1-Plan.md) #4). The repro was
+   **`prefix`** (not `keep-first`): both colliding `include` defs survive namespaced, so references are
+   *rewritten*, and `NamespaceRep` distributed them per-rep via the pre-inline model's per-file binding —
+   a call resolved inside `a.scad` to a.scad's own `part` became `a__part` where the flat bundle requires
+   `b__part` (LocalScope.cc last-wins). Fix: split `NamespaceRep`→`RenameDeclaration` + reference rewrite,
+   add `ResolvePrefix` that redirects every include-origin reference to the last include-origin def. `Auto`/
+   `keep-first`/`keep-last` were already correct (they drop losers + keep names → re-bind by name).
+2. **Always-namespace `use` imports** ([Post-Demo-Plan.md](docs/Post-Demo-Plan.md) Item C / **[ADR 0001](docs/adr/0001-include-use-scoping-and-namespacing.md)**).
+   Every non-`Protected` `use`-origin symbol is now namespaced *by construction* (`<filestem>__name`), not
+   only on a detected clash — matching OpenSCAD's per-file `FileContext` isolation. A **non-clashing**
+   import is namespaced **silently** (no SB5004 — it would otherwise fire per library symbol); genuine
+   clashes still warn. `include`-origin defs (flat last-wins) and `$`-special-vars (dynamic scope) are
+   left untouched. Re-blessed `B-002`; added `B-009-use-isolation`.
 
 **Why (read [ADR 0001](docs/adr/0001-include-use-scoping-and-namespacing.md) first):** OpenSCAD `include`
 is a flat textual merge (last-wins) and must **not** be namespaced; `use` is per-file `FileContext`
-isolation and should be namespaced *by construction*. The demo's "prefix every identifier" is rejected —
-it would break `include` cross-references and `$`-variable dynamic scope. Ground truth: `lexer.l` (include
-is lexer-level), `parser.y`/`ScopeContext.cc` (use isolation), verified at `C:\git\hub\openscad`.
-
-Obfuscator (`id_xxxxxx`) stays **vNext** — and when built, must use deterministic ids (a counter), never
-memory addresses (those break goldens/idempotence). It's a thin layer over the always-namespace work.
+isolation and is namespaced *by construction*. The demo's "prefix every identifier" is rejected — it
+would break `include` cross-references and `$`-variable dynamic scope. Ground truth: `lexer.l` (include is
+lexer-level), `parser.y`/`ScopeContext.cc` (use isolation), verified at `C:\git\hub\openscad`.
 
 ---
 
 ## Current state
 
-- **Slices 1–6 done** + **post-demo Items A/B** (this session): `dotnet build` zero-warning (warnings-as-errors), `dotnet test` green (**538 tests**: 520 in `ScadBundler.Core.Tests`, 18 in `ScadBundler.Cli.Tests`). Coverage: `Lexing/`≈98%, `Parsing/`≈99%, `Semantics/` 100%, `Loading/`≈98.8%, `Inlining/`≈99.6%, **`Emitting/`: `Emitter.cs`≈97%, `EmitOptions.cs` 100%**.
+- **Slices 1–6 done** + **post-demo Items A/B** + **#4 mis-bind & Item C always-namespace `use`** (this session): `dotnet build` zero-warning (warnings-as-errors), `dotnet test` green (**549 tests**: 531 in `ScadBundler.Core.Tests`, 18 in `ScadBundler.Cli.Tests`). Coverage: `Lexing/`≈98%, `Parsing/`≈99%, `Semantics/` 100%, `Loading/`≈98.8%, `Inlining/`≈99.6%, **`Emitting/`: `Emitter.cs`≈97%, `EmitOptions.cs` 100%**.
 - **Post-demo (this session), see [docs/Post-Demo-Plan.md](docs/Post-Demo-Plan.md):**
   - **A — Customizer parameters preserved.** The root file's leading parameter assignments are hoisted to the top of the bundle (verbatim, never renamed) and a synthesized `/* [Hidden] */` fences the rest, so OpenSCAD's Customizer shows the model's real knobs instead of an included library's globals. Verified on `C:\git\dan\SCAD\ForkedHolder.scad`. ([Inliner.cs](src/ScadBundler.Core/Inlining/Inliner.cs); golden `slice5-bundle/B-008`.)
   - **B — OpenSCAD-faithful search paths.** New [OpenScadEnvironment.cs](src/ScadBundler.Core/Loading/OpenScadEnvironment.cs) reconstructs OpenSCAD's `parser_init` order: absolutized `OPENSCADPATH` (empty→CWD) + the per-user library folder. Wired through `Bundler`/`BundleCommand`.
@@ -53,7 +68,7 @@ memory addresses (those break goldens/idempotence). It's a thin layer over the a
 
 - **`BundleOptions.BundleLicenses` and `.PreserveComments` are not read by the `Inliner`.** `--bundle-licenses` is wired through the CLI but currently a **no-op** (license aggregation was never implemented). `--preserve-comments` is honored where it belongs — in the **emitter** (`EmitOptions.PreserveComments`). Implementing license aggregation (collect + dedup leading license trivia on the root) is a clean post-v1 task.
 - **`include`/`use` leading trivia is dropped on flatten** (the statement is replaced by its target's contents). A license header riding on the root's `include` line is lost. Tied to the `--bundle-licenses` gap above.
-- **Latent cross-`include` mis-bind under non-`Auto` strategies** (inherited from Slice 4/5, unchanged): `--on-collision prefix|keep-first|keep-last` rewrites cross-`include`-duplicate *references* via `ISemanticModel.ReferencesTo`, which can bind a call to the earlier duplicate. The default pipeline and all B-* goldens are correct; the emitter doesn't touch resolution.
+- ~~**Latent cross-`include` mis-bind under non-`Auto` strategies**~~ **Resolved (this session):** the failing strategy was **`prefix`** — `NamespaceRep` rewrote cross-`include`-duplicate *references* per-rep via `ISemanticModel.ReferencesTo`, trusting the pre-inline model's per-file binding. `ResolvePrefix` now redirects every include-origin reference to the last include-origin definition (LocalScope.cc last-wins). `Auto`/`keep-first`/`keep-last` were already correct. See [Post-v1-Plan.md](docs/Post-v1-Plan.md) #4.
 - ~~**`CollisionStrategy.Error`** emits the same collision *warnings* as `Auto` and returns an empty bundle (no dedicated error-severity code), so the CLI exits `0` with empty output for that mode.~~ **Resolved (post-v1):** a genuine collision under `--on-collision error` now emits **SB5006** (Error-severity, one per colliding site) and the CLI exits `1` with no output. See [docs/Post-v1-Plan.md](docs/Post-v1-Plan.md).
 
 ## Post-v1 work (see `docs/Development-Slices.md`)

@@ -244,7 +244,7 @@ public sealed class CliTests
             out _);
 
         Assert.Equal(0, exit);
-        Assert.Contains("module widget() cube(2);", stdout, StringComparison.Ordinal);
+        Assert.Contains("module shared__widget() cube(2);", stdout, StringComparison.Ordinal); // use namespaced
     }
 
     [Fact]
@@ -260,7 +260,7 @@ public sealed class CliTests
             int exit = Run(project, ["bundle", project.Path("main.scad"), "-o", "-"], out string stdout, out _);
 
             Assert.Equal(0, exit);
-            Assert.Contains("module widget() cube(3);", stdout, StringComparison.Ordinal);
+            Assert.Contains("module shared__widget() cube(3);", stdout, StringComparison.Ordinal); // use namespaced
         }
         finally
         {

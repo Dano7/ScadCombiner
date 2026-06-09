@@ -40,7 +40,8 @@ public sealed class BundlerTests
             Environment.SetEnvironmentVariable("OPENSCADPATH", temp.At("libs"));
             BundleResult result = Bundler.Bundle(temp.At("proj/main.scad"), new BundleOptions([]));
 
-            Assert.Contains(result.Bundled.Statements, s => s is ModuleDefinition { Name: "box" });
+            // `use`-imports are namespaced by construction (ADR 0001): box → shared__box.
+            Assert.Contains(result.Bundled.Statements, s => s is ModuleDefinition { Name: "shared__box" });
             Assert.DoesNotContain(result.Diagnostics, d => d.Code == DiagnosticCode.IncludeUseNotFound);
         }
         finally

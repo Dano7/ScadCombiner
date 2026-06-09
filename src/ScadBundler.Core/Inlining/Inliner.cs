@@ -313,7 +313,19 @@ public static class Inliner
             {
                 foreach (Candidate rep in reps)
                 {
-                    _winners.Add(rep.Node);
+                    // A `use`-import is isolated by construction (OpenSCAD evaluates it in its own
+                    // FileContext, ScopeContext.cc), so it is always namespaced — not only on a detected
+                    // clash (ADR 0001: "safe by construction"). A non-clashing import is namespaced
+                    // silently: SB5004 would otherwise fire once per library symbol; the collision paths
+                    // below still warn for genuine clashes.
+                    if (rep is { FromUse: true, Protected: false })
+                    {
+                        NamespaceRep(rep, report: false);
+                    }
+                    else
+                    {
+                        _winners.Add(rep.Node);
+                    }
                 }
 
                 return;
@@ -504,9 +516,10 @@ public static class Inliner
         // Namespaces one definition: rename the declaration and the references the model bound to it.
         // Correct for the per-file-isolated cases — `use`-imports and the non-protected side of a
         // protected-prologue collision — where the model's binding already matches the bundle's scope.
-        private void NamespaceRep(Candidate rep)
+        // <paramref name="report"/> is false for a by-construction `use`-import (no clash → no SB5004).
+        private void NamespaceRep(Candidate rep, bool report = true)
         {
-            string newName = RenameDeclaration(rep);
+            string newName = RenameDeclaration(rep, report);
             foreach (AstNode reference in _model.ReferencesTo(SymbolFor(rep)))
             {
                 _renames[reference] = newName;
@@ -514,9 +527,10 @@ public static class Inliner
         }
 
         // Renames a colliding declaration to a unique namespaced name (`<filestem>__name`), records it as
-        // a winner, and emits SB5004. References are NOT rewritten here — the caller binds them (so a
-        // shared flat scope can point every reference at one surviving definition; see ResolvePrefix).
-        private string RenameDeclaration(Candidate rep)
+        // a winner, and (when <paramref name="report"/>) emits SB5004. References are NOT rewritten here —
+        // the caller binds them (so a shared flat scope can point every reference at one surviving
+        // definition; see ResolvePrefix).
+        private string RenameDeclaration(Candidate rep, bool report = true)
         {
             string file = rep.Node.Span.File.Path;
             string stem = Sanitize(Path.GetFileNameWithoutExtension(file));
@@ -524,10 +538,14 @@ public static class Inliner
             _winners.Add(rep.Node);
             _renames[rep.Node] = newName;
 
-            _diagnostics.Warning(
-                DiagnosticCode.NameRenamed,
-                $"'{rep.Name}' from '{file}' renamed to '{newName}' to resolve a collision.",
-                rep.Node.Span);
+            if (report)
+            {
+                _diagnostics.Warning(
+                    DiagnosticCode.NameRenamed,
+                    $"'{rep.Name}' from '{file}' renamed to '{newName}' to resolve a collision.",
+                    rep.Node.Span);
+            }
+
             return newName;
         }
 
