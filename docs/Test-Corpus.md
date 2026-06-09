@@ -79,6 +79,7 @@ Worked goldens live under `tests/Corpus/slice2-parser/<id>/expected.ast`; the ha
 ```
 SBnnnn <ERROR|WARNING|INFO> <line>:<col> <message>
 ```
+> **Multi-file (bundle) cases** include the file before the position, since a bundle's diagnostics span several files: `SBnnnn <SEV> <file>:<line>:<col> <message>` (paths are rendered relative to the case directory). The Slice-5 `B-` goldens use this form.
 
 **Bundle cases** — each lists **Assertions** (binding; derived from locked decisions — these are what the test checks now) and a **Reference output** (illustrative bundle; becomes the exact `expected.scad` golden once Slice 6 locks emitter formatting). Whitespace in reference output is not binding until then; presence/absence/rewrite of constructs **is**.
 
@@ -442,7 +443,11 @@ Companion positive: `ok = [each [1, 2, 3]];` → no diagnostics.
   module gear_b__gear() sphere(1);
   gear_b__gear();
   ```
-- **Diagnostics**: collision/namespacing diagnostic — code in `SB5xxx`, **TBD** (collision-resolution codes not yet assigned; see [Diagnostics.md](Diagnostics.md) "To Be Cataloged").
+- **Diagnostics** (one `SB5004` per namespaced definition, sorted by source position):
+  ```
+  SB5004 WARNING gear_a.scad:1:1 'gear' from 'gear_a.scad' renamed to 'gear_a__gear' to resolve a collision.
+  SB5004 WARNING gear_b.scad:1:1 'gear' from 'gear_b.scad' renamed to 'gear_b__gear' to resolve a collision.
+  ```
 
 **B-007 — `include` duplicate definitions are last-wins** *(matches OpenSCAD; SB3004)*
 - `a.scad` → `module part() cube(1);`

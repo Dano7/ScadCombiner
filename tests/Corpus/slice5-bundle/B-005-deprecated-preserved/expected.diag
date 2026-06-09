@@ -1,0 +1,1 @@
+SB5003 INFO main.scad:1:1 'import_stl' is deprecated in OpenSCAD; preserved unchanged. Consider migrating to its modern equivalent.

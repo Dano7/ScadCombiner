@@ -1,0 +1,2 @@
+SB5004 WARNING gear_a.scad:1:1 'gear' from 'gear_a.scad' renamed to 'gear_a__gear' to resolve a collision.
+SB5004 WARNING gear_b.scad:1:1 'gear' from 'gear_b.scad' renamed to 'gear_b__gear' to resolve a collision.

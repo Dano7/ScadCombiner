@@ -31,6 +31,18 @@ internal static class Builtins
     /// <returns><c>true</c> when recognized.</returns>
     public static bool IsConstant(string name) => Constants.Contains(name);
 
+    /// <summary>True when <paramref name="name"/> is a deprecated built-in the inliner preserves verbatim
+    /// (rather than normalizing), because rewriting it could alter geometry or file I/O — <c>import_stl</c>,
+    /// <c>import_dxf</c>, <c>import_off</c>, <c>dxf_linear_extrude</c>, <c>dxf_rotate_extrude</c> (SB5003).</summary>
+    /// <param name="name">The call name.</param>
+    /// <returns><c>true</c> when the name is a preserved-deprecated built-in.</returns>
+    public static bool IsDeprecatedPreserved(string name) => DeprecatedPreserved.Contains(name);
+
+    private static readonly HashSet<string> DeprecatedPreserved = new(StringComparer.Ordinal)
+    {
+        "import_stl", "import_dxf", "import_off", "dxf_linear_extrude", "dxf_rotate_extrude",
+    };
+
     private static readonly HashSet<string> Modules = new(StringComparer.Ordinal)
     {
         // CSG booleans / transforms / hull / CGAL

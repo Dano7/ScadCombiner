@@ -1,0 +1,1 @@
+SB5001 WARNING main.scad:1:1 'assign' is deprecated; rewritten to 'let'. (Behavior preserved.)

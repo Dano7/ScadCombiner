@@ -78,4 +78,29 @@ public static class DiagnosticCode
     /// reachable user declaration. Emitted conservatively (only when all files are loaded).
     /// </summary>
     public const string UnknownReference = "SB3005";
+
+    // Source loading / path resolution (SB4xxx)
+
+    /// <summary>An <c>include</c>/<c>use</c> path could not be resolved on the search path.</summary>
+    public const string IncludeUseNotFound = "SB4001";
+
+    /// <summary>A file appears in its own <c>include</c>/<c>use</c> ancestry (a cycle).</summary>
+    public const string CircularReference = "SB4002";
+
+    // Inlining / transformation (SB5xxx)
+
+    /// <summary>A deprecated <c>assign(...)</c> was normalized to an equivalent <c>let(...)</c>.</summary>
+    public const string AssignNormalized = "SB5001";
+
+    /// <summary>A deprecated <c>child(...)</c> was normalized to <c>children(...)</c>.</summary>
+    public const string ChildNormalized = "SB5002";
+
+    /// <summary>A deprecated built-in (e.g. <c>import_stl</c>) was preserved verbatim, not rewritten.</summary>
+    public const string DeprecatedBuiltinPreserved = "SB5003";
+
+    /// <summary>A definition (or private constant) was renamed/namespaced to resolve a collision.</summary>
+    public const string NameRenamed = "SB5004";
+
+    /// <summary>Structurally-identical definitions arriving via multiple paths were deduplicated.</summary>
+    public const string DuplicateMerged = "SB5005";
 }
