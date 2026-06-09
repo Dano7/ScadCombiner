@@ -104,6 +104,12 @@ public static class DiagnosticCode
     /// <summary>Structurally-identical definitions arriving via multiple paths were deduplicated.</summary>
     public const string DuplicateMerged = "SB5005";
 
+    /// <summary>
+    /// A genuine name collision was found under <c>--on-collision error</c>; the bundle is failed and
+    /// no output is produced (the strategy that turns every collision into a hard error).
+    /// </summary>
+    public const string CollisionError = "SB5006";
+
     // Emitting (SB6xxx)
 
     /// <summary>
