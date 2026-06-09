@@ -1,0 +1,2 @@
+SB5002 WARNING main.scad:2:5 'child(...)' is deprecated; rewritten to 'children(...)'.
+SB5002 WARNING main.scad:3:5 'child(...)' is deprecated; rewritten to 'children(...)'.
