@@ -116,6 +116,12 @@ A list-comprehension generator (`for` / `if` / `let` / `each` in their comprehen
 - **Action**: keep one, drop the rest.
 - **Message**: `Duplicate definition '{name}' merged ({n} copies).`
 
+### SB5006 — Collision under `--on-collision error` *(Error, Inliner)*
+- **Trigger**: a genuine cross-file name collision (two structurally-distinct definitions of the same kind/name that survive dedup) while the forced `error` strategy is selected.
+- **Action**: the whole bundle is failed — no output is produced (the CLI exits `1`). One diagnostic is emitted per colliding site.
+- **Message**: `Collision: {module|function|variable} '{name}' is also defined at {file}:{line}; no output is produced under '--on-collision error'.`
+- **Notes**: only `--on-collision error` raises this; `auto`/`keep-first`/`keep-last` resolve silently or with SB3003/SB3004 warnings, and `prefix` namespaces via SB5004. A structural duplicate (SB5005) is not a collision and does not trigger it.
+
 ### SB6001 — Emitter self-check failure *(Error, Emitter — internal)*
 - **Trigger**: emitted output fails to re-parse to an equivalent AST (an internal emitter bug; should never occur in production).
 - **Message**: `Internal: emitted output failed to re-parse.`

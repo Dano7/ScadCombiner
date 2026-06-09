@@ -292,7 +292,7 @@ public static class Inliner
 
                 case CollisionStrategy.Error:
                     _errorCollision = true;
-                    KeepLastWins(reps); // emit the same collision diagnostics; output is emptied below
+                    ReportCollisionError(reps); // hard-fail: Error-severity diagnostics; output emptied below
                     break;
 
                 default:
@@ -344,6 +344,23 @@ public static class Inliner
                     DiagnosticCode.DefinitionRedefined,
                     $"{Noun(redefinition.Kind)} '{redefinition.Name}' is redefined; the last definition wins.",
                     redefinition.Node.Span);
+            }
+        }
+
+        // `--on-collision error`: every genuine collision is a hard failure. Emit one Error-severity
+        // diagnostic per colliding site (so the CLI exits non-zero, vs. the keep-last warning churn of
+        // the other strategies); the whole bundle is emptied in Assemble.
+        private void ReportCollisionError(List<Candidate> reps)
+        {
+            for (int i = 1; i < reps.Count; i++)
+            {
+                Candidate previous = reps[i - 1];
+                _diagnostics.Error(
+                    DiagnosticCode.CollisionError,
+                    $"Collision: {KindNoun(reps[i].Kind)} '{reps[i].Name}' is also defined at "
+                    + $"{previous.Node.Span.File.Path}:{previous.Node.Span.Start.Line.ToString(CultureInfo.InvariantCulture)}; "
+                    + "no output is produced under '--on-collision error'.",
+                    reps[i].Node.Span);
             }
         }
 
@@ -538,6 +555,13 @@ public static class Inliner
                 .ThenBy(d => d.Code, StringComparer.Ordinal)];
 
         private static string Noun(DefKind kind) => kind == DefKind.Function ? "function" : "module";
+
+        private static string KindNoun(DefKind kind) => kind switch
+        {
+            DefKind.Function => "function",
+            DefKind.Variable => "variable",
+            _ => "module",
+        };
 
         private static string Sanitize(string stem)
         {

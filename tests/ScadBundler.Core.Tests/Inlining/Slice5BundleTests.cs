@@ -246,7 +246,7 @@ public sealed class Slice5BundleTests
     }
 
     [Fact]
-    public void ErrorStrategy_Collision_ProducesNoOutput()
+    public void ErrorStrategy_Collision_ProducesNoOutput_WithErrorDiagnostic()
     {
         var (bundled, diagnostics) = BundleHelper.Bundle(
             new BundleOptions([], CollisionStrategy.Error),
@@ -255,7 +255,26 @@ public sealed class Slice5BundleTests
             ("b.scad", "module part() sphere(1);"));
 
         Assert.Empty(bundled.Statements);
-        Assert.NotEmpty(diagnostics);
+
+        // A real collision under `error` must be an Error-severity diagnostic (so the CLI exits 1),
+        // not the keep-last warning the other strategies emit.
+        Diagnostic collision = Assert.Single(diagnostics, d => d.Code == DiagnosticCode.CollisionError);
+        Assert.Equal(DiagnosticSeverity.Error, collision.Severity);
+        Assert.Contains("part", collision.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain(diagnostics, d => d.Code == DiagnosticCode.DefinitionRedefined);
+    }
+
+    [Fact]
+    public void ErrorStrategy_NoCollision_BundlesNormally()
+    {
+        // The strategy only fires on a genuine collision; a clean project still produces output.
+        var (bundled, diagnostics) = BundleHelper.Bundle(
+            new BundleOptions([], CollisionStrategy.Error),
+            ("main.scad", "include <a.scad>\npart();"),
+            ("a.scad", "module part() cube(1);"));
+
+        Assert.NotEmpty(bundled.Statements);
+        Assert.DoesNotContain(diagnostics, d => d.Code == DiagnosticCode.CollisionError);
     }
 
     [Fact]

@@ -100,6 +100,25 @@ public sealed class CliTests
     }
 
     [Fact]
+    public void OnCollisionError_Collision_ExitsOne_NoOutput()
+    {
+        using var project = new TempProject(
+            ("main.scad", "include <a.scad>\ninclude <b.scad>\npart();"),
+            ("a.scad", "module part() cube(1);"),
+            ("b.scad", "module part() sphere(1);"));
+
+        int exit = Run(
+            project,
+            ["bundle", project.Path("main.scad"), "-o", "-", "--on-collision", "error"],
+            out string stdout,
+            out string stderr);
+
+        Assert.Equal(1, exit);
+        Assert.Contains("SB5006", stderr, StringComparison.Ordinal);
+        Assert.Equal(string.Empty, stdout);
+    }
+
+    [Fact]
     public void BundleLicenses_FlagIsAccepted()
     {
         using var project = new TempProject(("main.scad", "cube(1);"));
