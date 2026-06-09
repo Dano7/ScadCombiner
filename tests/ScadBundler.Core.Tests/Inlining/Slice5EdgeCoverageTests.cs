@@ -115,6 +115,28 @@ public sealed class Slice5EdgeCoverageTests
     }
 
     [Fact]
+    public void Use_CallToIncludeImportedLibraryDef_RewritesOnNamespaceCollision()
+    {
+        // `main` directly calls `shared`, which both libraries expose through `use` via their `include`.
+        // The colliding use-imports are namespaced, so the call must rewrite to the binding it resolves
+        // to (last-`use`-wins → b's copy). Before the analyzer saw a used lib's include-merged scope the
+        // call resolved to nothing, so it was left dangling against a now-renamed definition.
+        var (bundled, _) = BundleHelper.Bundle(
+            null,
+            ("main.scad", "use <a.scad>\nuse <b.scad>\nshared();"),
+            ("a.scad", "include <ca.scad>"),
+            ("ca.scad", "module shared() cube(1);"),
+            ("b.scad", "include <cb.scad>"),
+            ("cb.scad", "module shared() sphere(1);"));
+
+        IReadOnlyList<string> names = BundleHelper.TopLevelDeclarationNames(bundled);
+        Assert.Contains("ca__shared", names);
+        Assert.Contains("cb__shared", names);
+        var call = Assert.Single(bundled.Statements.OfType<ModuleInstantiation>());
+        Assert.Equal("cb__shared", call.Name); // last-`use`-wins → b's namespace
+    }
+
+    [Fact]
     public void Use_ImportsFunctionDefinition()
     {
         var (bundled, _) = BundleHelper.Bundle(

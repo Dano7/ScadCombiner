@@ -105,6 +105,42 @@ public sealed class SemanticCrossFileTests
     }
 
     [Fact]
+    public void Use_ExposesDefinitionsTheLibraryIncludes()
+    {
+        // `use <lib>` sees `lib`'s `include`-merged scope: OpenSCAD splices `include`d defs into the
+        // library's own scope at parse time, so `helper` (pulled into lib by its include) is callable
+        // through the `use` — matching FileContext::lookup_local_module and the inliner's import set.
+        var (graph, result) = SemanticHelper.AnalyzeGraph(
+            ("main.scad", "use <lib.scad>\nhelper();"),
+            ("lib.scad", "include <helpers.scad>"),
+            ("helpers.scad", "module helper() cube(1);"));
+        LoadedFile helpers = graph.ByAbsolutePath["helpers.scad"];
+        var call = (ModuleInstantiation)graph.Root.Ast.Statements[1];
+
+        Symbol? symbol = result.Model.Resolve(call);
+        Assert.NotNull(symbol);
+        Assert.Same(helpers.Ast.Statements[0], symbol.Declaration);
+        Assert.DoesNotContain(result.Diagnostics, d => d.Code == DiagnosticCode.UnknownReference);
+    }
+
+    [Fact]
+    public void Use_DoesNotExposeDefinitionsTheLibraryUses()
+    {
+        // `use` is non-transitive: `lib` only `use`s `deep`, so `deep`'s defs are not in `lib`'s own
+        // scope and stay invisible to `main` (FileContext consults a used lib's scope, never its usedlibs).
+        var (graph, result) = SemanticHelper.AnalyzeGraph(
+            ("main.scad", "use <lib.scad>\ndeep();"),
+            ("lib.scad", "use <deep.scad>"),
+            ("deep.scad", "module deep() cube(1);"));
+        var call = (ModuleInstantiation)graph.Root.Ast.Statements[1];
+
+        Assert.Null(result.Model.Resolve(call));
+        Assert.Contains(
+            result.Diagnostics,
+            d => d.Code == DiagnosticCode.UnknownReference && d.Message.Contains("deep"));
+    }
+
+    [Fact]
     public void Include_MergesDeclarations_IntoIncludingScope()
     {
         var (graph, result) = SemanticHelper.AnalyzeGraph(

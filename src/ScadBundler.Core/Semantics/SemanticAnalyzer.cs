@@ -736,14 +736,20 @@ public sealed class SemanticAnalyzer
     // Environments & completeness
     // ---------------------------------------------------------------------------------------------
 
-    private FileEnvironment BuildEnvironment(LoadedFile file)
+    private static FileEnvironment BuildEnvironment(LoadedFile file)
     {
         var used = new List<FileScope>();
         foreach (UseEdge edge in file.Uses)
         {
-            if (edge.Target is not null && !edge.FontPassthrough && _scopes.TryGetValue(edge.Target.Source, out FileScope? scope))
+            if (edge.Target is not null && !edge.FontPassthrough)
             {
-                used.Add(scope);
+                // A `use`d library exposes its whole `include`-merged scope: OpenSCAD splices an
+                // `include`d file's definitions into the including file's scope at parse time, so
+                // `use <lib>` sees what `lib` itself `include`s (FileContext::lookup_local_module reads
+                // `usedmod->scope`). It is NOT transitive over `use` — `BuildMergedScope` follows only
+                // `include` edges, never the used file's own `use`s — and it matches the set the inliner
+                // imports (Inliner.GatherUseImports walks the same include-closure).
+                used.Add(BuildMergedScope(edge.Target));
             }
         }
 

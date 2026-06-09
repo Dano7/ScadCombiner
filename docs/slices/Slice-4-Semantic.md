@@ -90,7 +90,7 @@ Each construct below introduces a **scope** (a name environment). Resolution wal
 | Function body | `FunctionDefinition` | its parameters |
 | Module body | `ModuleDefinition` | its parameters + locals/nested defs in the body |
 | **File (top-level)** | `ScadFile` | top-level modules, functions, variables |
-| Used-library | `use`d files | their modules/functions only (lookup, not a lexical parent) |
+| Used-library | `use`d files | their `include`-merged modules/functions only (a used file's own defs + what *it* `include`s, not what it `use`s; lookup, not a lexical parent) |
 | Builtins | [Builtins-Reference.md](../Builtins-Reference.md) | built-in modules/functions, `PI`, special vars |
 
 Only **File-scope** declarations produce renameable `Symbol`s. Everything inner (params, `let`/`for`/comprehension bindings, function-literal params) is **local** → `Resolve` returns `null` (the inliner never renames locals).
@@ -110,7 +110,7 @@ Only **File-scope** declarations produce renameable `Symbol`s. Everything inner 
 **Module call** `m(...)` / **function call** `f(...)` — lookup order mirrors `ScopeContext.cc`:
 1. nested defs in enclosing module bodies → file-scope defs ⇒ `Symbol(Module|Function)`.
 2. else **built-in** (Builtins-Reference) ⇒ `Resolve` = `null` (don't rename).
-3. else **used libraries** (the file's `use`d files; **last-`use`-wins** per `SourceFile.cc` front-insertion) ⇒ `Symbol` in that used file (the inliner imports/renames it).
+3. else **used libraries** (the file's `use`d files; **last-`use`-wins** per `SourceFile.cc` front-insertion) ⇒ `Symbol` in that used file's **`include`-merged** scope — `use <lib>` sees what `lib` itself `include`s (OpenSCAD merges an `include`d file into the includer's scope at parse time, `FileContext::lookup_local_module` reads `usedmod->scope`), but **not** what `lib` `use`s (non-transitive). The inliner imports/renames it from the same include-closure.
 4. else unknown ⇒ **SB3005** (Warning), mirroring OpenSCAD's "Ignoring unknown module/function".
 
 > Own-scope shadows built-ins (a user `module cube()` shadows the primitive). Used-libraries are consulted **after** built-ins. A user-file declaration shadows a used-library one of the same name (so the user's call binds to their own; the used one is reachable only from its own library's code).
@@ -149,6 +149,14 @@ Computes the top-level constants a `use`d file's exported callables need (so the
 | SB3005 | Warning | **(new)** conservative unknown reference — see below |
 
 **SB3005 — Unknown reference** *(Warning, Semantic)*: emitted only when confident — all files loaded, the name is not a built-in, special variable, local binding, or any reachable user declaration. Message: `Unknown {module|function|variable} '{name}'.` Mirrors OpenSCAD's "Ignoring unknown …" warnings; conservative by default to avoid false positives from library names the analyzer can't see. Add to [Diagnostics.md](../Diagnostics.md).
+
+> **Deferred (TODO) — the "all files loaded" gate ignores the `use`-closure.** The confidence gate is `IsComplete` (in `SemanticAnalyzer`). Its traversal (`EnqueueIncludesToStack`) descends **only through resolved `include` edges**; `HasUnresolvedEdges` checks each *visited* file's own `use` edges for `null` targets, but the traversal never *descends into* a `use`d library's own closure. So a root is judged complete even when a transitively-`use`d library has an unresolved `include`/`use`, and SB3005 can then fire for a name the missing file would have defined — a false positive against the conservative rule.
+>
+> This became slightly more material once `use`-resolution started seeing a used library's `include`-merged scope (§5): the analyzer now resolves *into* those closures, so their completeness genuinely affects whether a name is truly unknown.
+>
+> **Repro:** `main.scad` = `use <lib.scad>` + `thing();`; `lib.scad` = `include <missing.scad>` (unloadable). `main` is deemed complete (its only edge — `use`→`lib` — resolved; `main` has no `include`s to descend), so `thing()` → SB3005 even though `missing.scad` might define `thing`.
+>
+> **Impact: low.** Error path only — the loader already emits SB4001 (or SB4002 for a cycle) for the unresolved edge, so the extra SB3005 is redundant noise, never a wrong bundle. **Fix direction:** have the completeness traversal also follow resolved `use` targets (font pass-throughs count as resolved) so a used library's unresolved edges propagate "incomplete" to the root; add a regression case (unresolved edge inside a `use`d lib ⇒ no SB3005 in the using file).
 
 ## 9. Test plan
 
