@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>ScadBundler.Cli</RootNamespace>
+    <AssemblyName>scadbundler</AssemblyName>
+
+    <!-- NuGet global-tool packaging: installs as the `scadbundler` command. -->
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>scadbundler</ToolCommandName>
+    <PackageId>ScadBundler</PackageId>
+    <Version>0.1.0</Version>
+    <Authors>ScadBundler</Authors>
+    <Description>AST-based OpenSCAD file bundler: combines a multi-file project into one .scad file.</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+
+    <!-- The CLI is an application, not a documented library surface. -->
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="ScadBundler.Cli.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ScadBundler.Core\ScadBundler.Core.csproj" />
+  </ItemGroup>
+
+</Project>

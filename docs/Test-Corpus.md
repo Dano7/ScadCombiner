@@ -81,7 +81,7 @@ SBnnnn <ERROR|WARNING|INFO> <line>:<col> <message>
 ```
 > **Multi-file (bundle) cases** include the file before the position, since a bundle's diagnostics span several files: `SBnnnn <SEV> <file>:<line>:<col> <message>` (paths are rendered relative to the case directory). The Slice-5 `B-` goldens use this form.
 
-**Bundle cases** — each lists **Assertions** (binding; derived from locked decisions — these are what the test checks now) and a **Reference output** (illustrative bundle; becomes the exact `expected.scad` golden once Slice 6 locks emitter formatting). Whitespace in reference output is not binding until then; presence/absence/rewrite of constructs **is**.
+**Bundle cases** — each lists **Assertions** (binding; derived from locked decisions) and a **Reference output**, now locked as the exact `expected.scad` golden at `tests/Corpus/slice5-bundle/<id>/expected.scad` (Slice 6 fixed emitter formatting, so whitespace **is** binding alongside presence/absence/rewrite of constructs). The Slice-6 corpus runner regenerates every golden from current emitter output under `BLESS_EMIT=1`.
 
 ---
 
@@ -514,7 +514,7 @@ Each locked decision maps to at least one binding case and, where behavioral, an
 - [x] Expressions: precedence/associativity **gotchas** pinned (E-004–E-008, from `parser.y`); exhaustive per-level battery still TODO
 - [ ] Semantic: duplicate-definition, undefined-symbol, arity cases
 - [ ] Bundle: cycle detection, search-path/`OPENSCADPATH`, dedup (identical module hashing), all `--on-collision` strategies, license aggregation
-- [ ] Emitter: brace style, line-length wrapping, `--minify`, license header block
+- [x] Emitter: per-node formatting, precedence parenthesization, `--minify`, brace/indent style, Customizer trivia (EM-001), idempotence (EM-002), and the `B-001`..`B-007` exact goldens (`slice6-emit/` + `slice5-bundle/*/expected.scad`); line-length wrapping + license-header aggregation remain post-v1
 - [ ] Real-world golden masters: small slices of BOSL2 / NopSCADlib / dotSCAD
 - [ ] Adopt OpenSCAD `tests/data/modulecache-tests` (cycles, use/include, overload) + `examples/` (~50 valid files) as parser + integration fixtures
 - [ ] Integration harness wired for V1–V3

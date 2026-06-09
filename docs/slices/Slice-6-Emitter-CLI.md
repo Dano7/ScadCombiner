@@ -1,6 +1,6 @@
 # Slice 6 — Emitter & CLI
 
-**Status**: Implementation-ready. The capstone: renders the bundled `ScadFile` (from [Slice 5](Slice-5-Loader-Inliner.md)) to text and ships the `scadbundler` command. Self-contained with [AST-Reference.md](../AST-Reference.md) (nodes, trivia, `RawText`), [Parser-Planning.md](../Parser-Planning.md) (precedence — for parenthesization), [UX.md](../UX.md) (CLI surface), and [Test-Corpus.md](../Test-Corpus.md) (`EM-001`/`EM-002`; this slice makes the `B-*` reference outputs **exact goldens**).
+**Status**: Implemented (Slices 1–6 complete; pipeline closed end-to-end). The capstone: renders the bundled `ScadFile` (from [Slice 5](Slice-5-Loader-Inliner.md)) to text and ships the `scadbundler` command. Self-contained with [AST-Reference.md](../AST-Reference.md) (nodes, trivia, `RawText`), [Parser-Planning.md](../Parser-Planning.md) (precedence — for parenthesization), [UX.md](../UX.md) (CLI surface), and [Test-Corpus.md](../Test-Corpus.md) (`EM-001`/`EM-002`; this slice makes the `B-*` reference outputs **exact goldens**).
 
 **Outcome**: a deterministic pretty-printer that turns the bundled AST into valid, well-formatted OpenSCAD preserving comments/Customizer blocks/licenses — and a NuGet-distributed CLI that runs the whole pipeline end-to-end.
 
@@ -8,15 +8,15 @@
 
 ## 1. Exit Criteria
 
-- [ ] `Emitter.Emit(scadFile, options)` produces **valid OpenSCAD** for any AST the parser can produce.
-- [ ] **Idempotent**: `Emit(Parse(Emit(ast))) == Emit(ast)`; and for canonically-formatted input, `Emit(Parse(src)) == src` (`EM-002`).
-- [ ] **Round-trip fidelity**: `RawText` preserved for numbers/strings; author parentheses preserved; comment trivia (incl. Customizer `/* [..] */` and `// [min:max]`) preserved and correctly placed (`EM-001`); `BlankLineBefore` → exactly one blank line.
-- [ ] **Correct parenthesization**: synthesized/transformed subtrees get the minimal parentheses needed to preserve meaning per [Parser-Planning.md](../Parser-Planning.md) precedence.
-- [ ] `--minify` drops comments/blank lines and emits the shortest semantically-equivalent text (necessary token-separating spaces kept).
-- [ ] The `B-001`..`B-007` reference bundles, emitted with default options, match checked-in `expected.scad` goldens exactly (Test-Corpus §4).
-- [ ] `scadbundler bundle <in> [opts]` runs load→analyze→inline→emit, writes output (or stdout), prints diagnostics, returns correct exit codes.
-- [ ] Packs as a .NET global tool (`dotnet tool install --global ScadBundler`; command `scadbundler`).
-- [ ] Coverage of `Emitting/` ≥ 95%; CLI covered by integration tests.
+- [x] `Emitter.Emit(scadFile, options)` produces **valid OpenSCAD** for any AST the parser can produce.
+- [x] **Idempotent**: `Emit(Parse(Emit(ast))) == Emit(ast)`; and for canonically-formatted input, `Emit(Parse(src)) == src` (`EM-002`).
+- [x] **Round-trip fidelity**: `RawText` preserved for numbers/strings; author parentheses preserved; comment trivia (incl. Customizer `/* [..] */` and `// [min:max]`) preserved and correctly placed (`EM-001`); `BlankLineBefore` → exactly one blank line.
+- [x] **Correct parenthesization**: synthesized/transformed subtrees get the minimal parentheses needed to preserve meaning per [Parser-Planning.md](../Parser-Planning.md) precedence.
+- [x] `--minify` drops comments/blank lines and emits the shortest semantically-equivalent text (necessary token-separating spaces kept).
+- [x] The `B-001`..`B-007` reference bundles, emitted with default options, match checked-in `expected.scad` goldens exactly (Test-Corpus §4).
+- [x] `scadbundler bundle <in> [opts]` runs load→analyze→inline→emit, writes output (or stdout), prints diagnostics, returns correct exit codes.
+- [x] Packs as a .NET global tool (`dotnet tool install --global ScadBundler`; command `scadbundler`).
+- [x] Coverage of `Emitting/` ≥ 95% (`Emitter.cs` ≈ 97%); CLI covered by integration tests (`ScadBundler.Cli.Tests`).
 
 ---
 
@@ -83,6 +83,7 @@ Deterministic so `expected.scad` goldens are stable. (All configurable; these ar
 - **One statement per line** at current indent; statement ends with `;` immediately (no space before).
 - **Blocks** (`BraceStyle.SameLine`, K&R): `{` follows the header after one space; children indented +1; `}` on its own line at the header's indent. A single-statement body (non-block) is emitted on the same line: `module a() cube(1);`.
 - **Module instantiation**: `name(args)` then — `Child == null` → `;`; `Child` is a block → ` { … }`; `Child` is another instantiation (chain) → one space then the child, kept on one line (`translate([0, 0, 5]) rotate([0, 0, 45]) cube(10);`). Modifiers prefix directly: `#`, `%`, `!`, `*` (outer→inner).
+- **Keyword forms** (locks the goldens): control-flow and functional keywords are immediately followed by their `(` with **no space** — `if(c)`, `for(i = …)`, `intersection_for(…)`, `let(a = 1)`, `function(x)`, `assert(c)`, `echo(s)` — and a single space separates the `)` from the body/clause (`let(a = 1, b = 2) translate(…) cube(1);`). `else` is surrounded by single spaces; an `if`/`else if`/`else` chain is emitted on one line. `module`/`function` definitions keep the space after the keyword before the name (`module ring(d) …`).
 - **Arguments / parameters**: `, `-separated; no space after `(` or before `)`; named as `name = value`.
 - **Operators**: binary → ` op ` (spaces both sides); unary prefix → no space (`-x`, `!x`); ternary → `c ? a : b`.
 - **Collections**: vectors `[a, b, c]`; ranges `[start:end]` / `[start:step:end]` (no spaces around `:`); index `a[i]`; member `a.x`.

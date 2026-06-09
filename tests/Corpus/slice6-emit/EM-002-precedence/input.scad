@@ -1,0 +1,9 @@
+neg_pow = -2 ^ 2;
+right_assoc = 2 ^ 3 ^ 2;
+pow_unary = 2 ^ -1;
+logic = aa || bb && cc;
+bitwise = pp | qq & rr + ss;
+author_parens = (mm + nn) * oo;
+needed_parens = uu - (vv - ww);
+ternary = c1 ? t1 : c2 ? t2 : e2;
+neg_mul = -xx * yy;

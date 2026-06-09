@@ -103,4 +103,12 @@ public static class DiagnosticCode
 
     /// <summary>Structurally-identical definitions arriving via multiple paths were deduplicated.</summary>
     public const string DuplicateMerged = "SB5005";
+
+    // Emitting (SB6xxx)
+
+    /// <summary>
+    /// Emitter self-check failure: the emitted text did not re-parse to a structurally-equivalent AST.
+    /// An internal emitter bug; enabled as a correctness guard in debug/tests and never expected to fire.
+    /// </summary>
+    public const string EmitterSelfCheckFailed = "SB6001";
 }
