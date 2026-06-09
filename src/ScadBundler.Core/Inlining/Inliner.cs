@@ -342,11 +342,7 @@ public static class Inliner
             switch (_options.OnCollision)
             {
                 case CollisionStrategy.Prefix:
-                    foreach (Candidate rep in reps)
-                    {
-                        NamespaceRep(rep);
-                    }
-
+                    ResolvePrefix(reps);
                     break;
 
                 case CollisionStrategy.KeepFirst:
@@ -383,6 +379,35 @@ public static class Inliner
             }
 
             KeepLastWins(includeReps);
+        }
+
+        // Prefix: namespace every colliding definition (both survive). A use-origin def is isolated in
+        // its own per-file FileContext, so each keeps its own references. include-origin defs share one
+        // flat scope (LocalScope.cc last-wins), so every reference to the colliding name must bind to the
+        // last include-origin definition — it must NOT be distributed across the namespaced copies by the
+        // pre-inline model, which resolves each reference against its own file's view and would mis-bind a
+        // cross-include call (e.g. an a.scad-internal call to a name that b.scad redefines).
+        private void ResolvePrefix(List<Candidate> reps)
+        {
+            foreach (Candidate rep in reps.Where(r => r.FromUse))
+            {
+                NamespaceRep(rep);
+            }
+
+            List<Candidate> includeReps = [.. reps.Where(r => !r.FromUse)];
+            if (includeReps.Count == 0)
+            {
+                return;
+            }
+
+            foreach (Candidate rep in includeReps)
+            {
+                RenameDeclaration(rep);
+            }
+
+            // The bundle's flat scope binds the name to the last include-origin definition; point every
+            // reference there (the earlier namespaced copies become dead code, as in OpenSCAD).
+            RedirectReferences(includeReps, _renames[includeReps[^1].Node]);
         }
 
         // Keep the last definition (highest emit position); each earlier one is a redefinition the last
@@ -476,7 +501,22 @@ public static class Inliner
             return reps;
         }
 
+        // Namespaces one definition: rename the declaration and the references the model bound to it.
+        // Correct for the per-file-isolated cases — `use`-imports and the non-protected side of a
+        // protected-prologue collision — where the model's binding already matches the bundle's scope.
         private void NamespaceRep(Candidate rep)
+        {
+            string newName = RenameDeclaration(rep);
+            foreach (AstNode reference in _model.ReferencesTo(SymbolFor(rep)))
+            {
+                _renames[reference] = newName;
+            }
+        }
+
+        // Renames a colliding declaration to a unique namespaced name (`<filestem>__name`), records it as
+        // a winner, and emits SB5004. References are NOT rewritten here — the caller binds them (so a
+        // shared flat scope can point every reference at one surviving definition; see ResolvePrefix).
+        private string RenameDeclaration(Candidate rep)
         {
             string file = rep.Node.Span.File.Path;
             string stem = Sanitize(Path.GetFileNameWithoutExtension(file));
@@ -484,15 +524,24 @@ public static class Inliner
             _winners.Add(rep.Node);
             _renames[rep.Node] = newName;
 
-            foreach (AstNode reference in _model.ReferencesTo(SymbolFor(rep)))
-            {
-                _renames[reference] = newName;
-            }
-
             _diagnostics.Warning(
                 DiagnosticCode.NameRenamed,
                 $"'{rep.Name}' from '{file}' renamed to '{newName}' to resolve a collision.",
                 rep.Node.Span);
+            return newName;
+        }
+
+        // Points every reference the pre-inline model bound to any of <paramref name="reps"/> at one name
+        // — the bundle's flat-scope binding target — rather than trusting the per-file resolution.
+        private void RedirectReferences(IEnumerable<Candidate> reps, string targetName)
+        {
+            foreach (Candidate rep in reps)
+            {
+                foreach (AstNode reference in _model.ReferencesTo(SymbolFor(rep)))
+                {
+                    _renames[reference] = targetName;
+                }
+            }
         }
 
         private string UniqueName(string baseName)

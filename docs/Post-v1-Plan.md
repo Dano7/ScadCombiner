@@ -18,7 +18,7 @@ blur review and strain the quality bar (warnings-as-errors, goldens, "fix the sp
 | 1 | `--on-collision error` hard-fail | Bug (cosmetic) | S | Low | **Done** (this session) |
 | 2 | License aggregation (`--bundle-licenses`) | Feature | M | Low | Own session — do next |
 | 3 | `include`/`use` leading trivia dropped on flatten | Bug | S–M | Low | Fold into #2 |
-| 4 | Cross-`include` mis-bind under non-`Auto` strategies | Correctness bug | M | **High** | Own session, repro-first |
+| 4 | Cross-`include` mis-bind under non-`Auto` strategies | Correctness bug | M | **High** | **Done** (this session) |
 | 5 | Block-scope duplicate detection (SB3003/SB3004) | Design deferral | M | Med (false positives) | **Keep deferred** — revisit on demand |
 
 ---
@@ -106,6 +106,24 @@ blur review and strain the quality bar (warnings-as-errors, goldens, "fix the sp
   Item C), which reuses the same `ISemanticModel.ReferencesTo` rewrite path. Do this **first**,
   repro-first, with the `Auto` goldens guarded.
 
+### Resolved (this session)
+
+- **Repro:** the failing case was **`prefix`**, not `keep-first`. Under `prefix` both colliding
+  `include` definitions survive with namespaced names, so references must be *rewritten* — and
+  `NamespaceRep` distributed them per-rep via `ReferencesTo`, which trusts the pre-inline model's
+  per-file binding. A reference resolved inside `a.scad` to `a.scad`'s own `part` was rewritten to
+  `a__part`, where the flat bundle (LocalScope.cc last-wins) requires `b__part`. `keep-first`/`keep-last`/
+  `Auto` were already correct: they drop the losers and keep the survivor's original name, so references
+  re-bind by name to the survivor — no rewrite, no mis-bind.
+- **Fix:** [Inliner.cs](../src/ScadBundler.Core/Inlining/Inliner.cs) — factored `NamespaceRep` into
+  `RenameDeclaration` (decl-only rename + SB5004) and a separate reference rewrite; new `ResolvePrefix`
+  namespaces each `use`-origin def per-rep (isolated FileContext) but **redirects every include-origin
+  reference to the last include-origin definition** via `RedirectReferences`. The earlier copies survive
+  as dead code, exactly as a shadowed definition does in OpenSCAD.
+- **Tests:** `PrefixStrategy_CrossIncludeInternalReference_BindsToLastWins` (the fix) and
+  `KeepFirstStrategy_CrossIncludeInternalReference_BindsToKept` (guards the keep-first half), both in
+  `Slice5BundleTests`. All `B-*` goldens and the `Auto` path are unchanged.
+
 ---
 
 ## 5. Block-scope duplicate detection (SB3003/SB3004 within a block) — in-code deferral
@@ -130,8 +148,8 @@ blur review and strain the quality bar (warnings-as-errors, goldens, "fix the sp
 ## Recommended sequence
 
 1. ~~`--on-collision error` hard-fail~~ — **done**.
-2. **License aggregation (#2, absorbing #3)** — additive, low-risk, user-visible.
-3. **Cross-`include` mis-bind (#4)** — correctness; its own session, repro-first, `Auto` goldens guarded.
+2. ~~**Cross-`include` mis-bind (#4)**~~ — **done** (this session; prerequisite for always-namespace `use`).
+3. **License aggregation (#2, absorbing #3)** — additive, low-risk, user-visible.
 4. **Block-scope duplicate detection (#5)** — leave deferred; revisit only if a real file demands it.
 
 Broader post-v1 scope (WASM/JSON API + "ScadBundler Live", real-world golden masters, OpenSCAD

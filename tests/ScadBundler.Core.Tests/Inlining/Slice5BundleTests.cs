@@ -210,6 +210,50 @@ public sealed class Slice5BundleTests
     }
 
     [Fact]
+    public void PrefixStrategy_CrossIncludeInternalReference_BindsToLastWins()
+    {
+        // Regression for the cross-`include` mis-bind (Post-v1-Plan #4): a.scad defines `part` and an
+        // internal call to it; b.scad redefines `part`. The pre-inline model resolves a.scad's call
+        // against a.scad's own scope (→ a.part), but the flat bundle binds the name last-wins (→ b.part).
+        // Under `prefix` both definitions survive namespaced, so every reference — including a.scad's
+        // internal one — must be rewritten to the last-wins copy, not the per-file copy.
+        var (bundled, _) = BundleHelper.Bundle(
+            new BundleOptions([], CollisionStrategy.Prefix),
+            ("main.scad", "include <a.scad>\ninclude <b.scad>\npart();"),
+            ("a.scad", "module part() cube(1);\nmodule usesA() part();"),
+            ("b.scad", "module part() sphere(1);"));
+
+        IReadOnlyList<string> names = BundleHelper.TopLevelDeclarationNames(bundled);
+        Assert.Contains("a__part", names); // a's copy survives (now dead code, as in OpenSCAD)
+        Assert.Contains("b__part", names);
+
+        var usesA = bundled.Statements.OfType<ModuleDefinition>().Single(m => m.Name == "usesA");
+        Assert.Equal("b__part", ((ModuleInstantiation)usesA.Body).Name); // ← was a__part (the mis-bind)
+
+        var topLevelCall = Assert.Single(bundled.Statements.OfType<ModuleInstantiation>());
+        Assert.Equal("b__part", topLevelCall.Name);
+    }
+
+    [Fact]
+    public void KeepFirstStrategy_CrossIncludeInternalReference_BindsToKept()
+    {
+        // Guard the `keep-first` half of Post-v1-Plan #4: keeping the first definition and dropping the
+        // rest leaves one surviving `part` with its original name, so both calls (the top-level one the
+        // model bound to b, and a.scad's internal one) re-bind by name to the kept (first) definition.
+        var (bundled, _) = BundleHelper.Bundle(
+            new BundleOptions([], CollisionStrategy.KeepFirst),
+            ("main.scad", "include <a.scad>\ninclude <b.scad>\npart();"),
+            ("a.scad", "module part() cube(1);\nmodule usesA() part();"),
+            ("b.scad", "module part() sphere(1);"));
+
+        var part = Assert.Single(bundled.Statements.OfType<ModuleDefinition>(), m => m.Name == "part");
+        Assert.True(part.Body is ModuleInstantiation { Name: "cube" }); // a (the first) is kept
+
+        var usesA = bundled.Statements.OfType<ModuleDefinition>().Single(m => m.Name == "usesA");
+        Assert.Equal("part", ((ModuleInstantiation)usesA.Body).Name);
+    }
+
+    [Fact]
     public void KeepLastStrategy_IncludeCollision_KeepsLast_WithSB3004()
     {
         var (bundled, diagnostics) = BundleHelper.Bundle(
