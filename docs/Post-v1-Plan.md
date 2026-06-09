@@ -100,7 +100,11 @@ blur review and strain the quality bar (warnings-as-errors, goldens, "fix the sp
 - **OpenSCAD reference:** `LocalScope.cc` (flat-scope last-wins) defines the `Auto`/`keep-last` truth;
   `keep-first`/`prefix` are bundler-only policies with no OpenSCAD analogue, so correctness here means
   "the emitted call resolves to the definition the strategy kept."
-- **Effort:** Medium. **Risk:** High. **Disposition:** own focused session.
+- **Effort:** Medium. **Risk:** High. **Disposition:** **Pulled forward to the next session** (was
+  "own focused session"). It is now a **prerequisite** for the decided "always-namespace `use`" work
+  ([ADR 0001](adr/0001-include-use-scoping-and-namespacing.md); [Post-Demo-Plan.md](Post-Demo-Plan.md)
+  Item C), which reuses the same `ISemanticModel.ReferencesTo` rewrite path. Do this **first**,
+  repro-first, with the `Auto` goldens guarded.
 
 ---
 
