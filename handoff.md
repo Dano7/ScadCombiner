@@ -4,9 +4,39 @@ You are picking up **ScadBundler**, an AST-based OpenSCAD file bundler (C# / .NE
 
 ---
 
+## ▶ Next session — start here (in order)
+
+Two correctness items, decided and planned this session. **Do them in this order** — the first is a
+prerequisite for the second (both touch the same `ISemanticModel.ReferencesTo` reference-rewrite path).
+
+1. **Fix the cross-`include` mis-bind under non-`Auto` strategies** — [Post-v1-Plan.md](docs/Post-v1-Plan.md) #4.
+   Repro-first; the one place the bundler can mis-bind today. Guard all `Auto`/`B-*` goldens. This makes
+   the reference rewrite trustworthy before #2 leans on it harder.
+2. **Always-namespace `use` imports (default)** — [Post-Demo-Plan.md](docs/Post-Demo-Plan.md) Item C,
+   decided in **[ADR 0001](docs/adr/0001-include-use-scoping-and-namespacing.md)**. Route every
+   non-`Protected` `use`-origin candidate through `NamespaceRep` (not just colliding ones); leave
+   `include`-origin defs and `$`-special-vars **untouched**. Update `UseImport_NoCollision_KeepsOriginalName`
+   and re-bless `slice5-bundle/B-002`; add the two-libs-with-private-`helper` isolation golden and an
+   own-vs-used precedence test.
+
+**Why (read [ADR 0001](docs/adr/0001-include-use-scoping-and-namespacing.md) first):** OpenSCAD `include`
+is a flat textual merge (last-wins) and must **not** be namespaced; `use` is per-file `FileContext`
+isolation and should be namespaced *by construction*. The demo's "prefix every identifier" is rejected —
+it would break `include` cross-references and `$`-variable dynamic scope. Ground truth: `lexer.l` (include
+is lexer-level), `parser.y`/`ScopeContext.cc` (use isolation), verified at `C:\git\hub\openscad`.
+
+Obfuscator (`id_xxxxxx`) stays **vNext** — and when built, must use deterministic ids (a counter), never
+memory addresses (those break goldens/idempotence). It's a thin layer over the always-namespace work.
+
+---
+
 ## Current state
 
-- **Slices 1–6 done:** `dotnet build` zero-warning (warnings-as-errors), `dotnet test` green (**523 tests**: 505 in `ScadBundler.Core.Tests`, 18 in `ScadBundler.Cli.Tests`). Coverage: `Lexing/`≈98%, `Parsing/`≈99%, `Semantics/` 100%, `Loading/`≈98.8%, `Inlining/`≈99.6%, **`Emitting/`: `Emitter.cs`≈97%, `EmitOptions.cs` 100%**.
+- **Slices 1–6 done** + **post-demo Items A/B** (this session): `dotnet build` zero-warning (warnings-as-errors), `dotnet test` green (**538 tests**: 520 in `ScadBundler.Core.Tests`, 18 in `ScadBundler.Cli.Tests`). Coverage: `Lexing/`≈98%, `Parsing/`≈99%, `Semantics/` 100%, `Loading/`≈98.8%, `Inlining/`≈99.6%, **`Emitting/`: `Emitter.cs`≈97%, `EmitOptions.cs` 100%**.
+- **Post-demo (this session), see [docs/Post-Demo-Plan.md](docs/Post-Demo-Plan.md):**
+  - **A — Customizer parameters preserved.** The root file's leading parameter assignments are hoisted to the top of the bundle (verbatim, never renamed) and a synthesized `/* [Hidden] */` fences the rest, so OpenSCAD's Customizer shows the model's real knobs instead of an included library's globals. Verified on `C:\git\dan\SCAD\ForkedHolder.scad`. ([Inliner.cs](src/ScadBundler.Core/Inlining/Inliner.cs); golden `slice5-bundle/B-008`.)
+  - **B — OpenSCAD-faithful search paths.** New [OpenScadEnvironment.cs](src/ScadBundler.Core/Loading/OpenScadEnvironment.cs) reconstructs OpenSCAD's `parser_init` order: absolutized `OPENSCADPATH` (empty→CWD) + the per-user library folder. Wired through `Bundler`/`BundleCommand`.
+  - **C (`--qualify-all`)** and **D (obfuscator, vNext)** remain scoped but unimplemented.
 - Branch is **`Claude_implementation`**. Last feature commit: `feat(emitter): implement Slice 6 — emitter & CLI` (this session).
 - **Projects:** `src/ScadBundler.Core` (the library), **`src/ScadBundler`** (the CLI, `PackAsTool` → `scadbundler`), `tests/ScadBundler.Core.Tests`, **`tests/ScadBundler.Cli.Tests`**. All four are in `ScadBundler.sln`.
 - **Entry points:** `Bundler.Bundle(rootPath, options)` (disk + `OPENSCADPATH`) → `BundleResult`; `Emitter.Emit(scadFile, EmitOptions?)` → `string`. The CLI wires them in `src/ScadBundler/BundleCommand.cs`.
