@@ -17,7 +17,12 @@ public enum CollisionStrategy
     /// <summary>Any collision is an error; no output is produced.</summary>
     Error,
 
-    /// <summary>Keep the first definition of each colliding name; drop the rest.</summary>
+    /// <summary>Keep the first definition of each colliding name (bundle emit order); silently drop
+    /// the rest. The one strategy that deliberately diverges from OpenSCAD's native last-wins: a
+    /// bundle-time repair for when a later — often transitively included, third-party — file stomps a
+    /// name the model was written against and the sources can't be edited or reordered. A reassigned
+    /// variable keeps its first assignment's original expression, and the output is intentionally not
+    /// equivalent to the original project (see UX.md "Collision Strategies").</summary>
     KeepFirst,
 
     /// <summary>Keep the last definition of each colliding name; drop the rest.</summary>

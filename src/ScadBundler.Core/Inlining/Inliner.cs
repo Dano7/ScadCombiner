@@ -68,6 +68,7 @@ public static class Inliner
 
         private readonly Dictionary<AstNode, string> _renames = new(ReferenceEqualityComparer.Instance);
         private readonly HashSet<AstNode> _winners = new(ReferenceEqualityComparer.Instance);
+        private readonly Dictionary<AstNode, Statement> _replacements = new(ReferenceEqualityComparer.Instance);
         private readonly HashSet<string> _takenNames = new(StringComparer.Ordinal);
         private Attribution? _attribution;
         private bool _errorCollision;
@@ -468,11 +469,26 @@ public static class Inliner
             RedirectReferences(includeReps, _renames[includeReps[^1].Node]);
         }
 
-        // Keep the last definition (highest emit position); each earlier one is a redefinition the last
-        // overrides — SB3004 (module/function) / SB3003 (variable), matching OpenSCAD flat-scope last-wins.
+        // Keep the last definition; each earlier one is a redefinition the last overrides — SB3004
+        // (module/function) / SB3003 (variable), matching OpenSCAD flat-scope last-wins. Emit position
+        // differs by kind: a module/function is scope-wide, so the last node stays at its own slot. A
+        // reassigned variable, though, is overwritten *in place* by OpenSCAD's parser (parser.y
+        // handle_assignment → Assignment::setExpr), so the winning expression evaluates at the FIRST
+        // assignment's document position — the bundle keeps the first occurrence's emit slot and
+        // substitutes the last expression into it (reads between the two see the final value, exactly
+        // as in OpenSCAD; the SB5008 checker then sees the assignment where OpenSCAD evaluates it).
         private void KeepLastWins(List<Candidate> reps)
         {
-            _winners.Add(reps[^1].Node);
+            if (reps is [{ Kind: DefKind.Variable, Node: AssignmentStatement first }, .., { Node: AssignmentStatement last }])
+            {
+                _winners.Add(first);
+                _replacements[first] = first with { Value = last.Value };
+            }
+            else
+            {
+                _winners.Add(reps[^1].Node);
+            }
+
             for (int i = 1; i < reps.Count; i++)
             {
                 ReportRedefinition(reps[i], reps[i - 1]);
@@ -707,7 +723,7 @@ public static class Inliner
             {
                 if (_winners.Contains(item.Node) && emitted.Add(item.Node))
                 {
-                    rest.Add(Finish(rewriter.RewriteStatement(item.Node), banner: true));
+                    rest.Add(Finish(rewriter.RewriteStatement(Substituted(item.Node)), banner: true));
                 }
             }
 
@@ -726,7 +742,7 @@ public static class Inliner
                     }
                 }
 
-                rest.Add(Finish(rewriter.RewriteStatement(statement), banner: true));
+                rest.Add(Finish(rewriter.RewriteStatement(Substituted(statement)), banner: true));
             }
 
             // Fence the remaining top-level assignments out of the Customizer with a synthesized
@@ -751,6 +767,12 @@ public static class Inliner
 
             return new ScadFile(root.Source, statements);
         }
+
+        // The statement to emit for a winning node: the in-place expression substitution recorded by
+        // KeepLastWins for a reassigned variable (first occurrence's slot/trivia, last occurrence's
+        // expression), or the node itself.
+        private Statement Substituted(Statement statement) =>
+            _replacements.TryGetValue(statement, out Statement? replacement) ? replacement : statement;
 
         // Prepends a synthesized `/* [Hidden] */` Customizer boundary to a statement's leading trivia.
         // Modeled as trivia (not a node) so it round-trips the emitter self-check (a comment re-parses

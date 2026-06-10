@@ -471,6 +471,35 @@ public sealed class Slice5BundleTests
     }
 
     [Fact]
+    public void IncludeVariableReassignment_EmitsWinningExpressionAtFirstPosition()
+    {
+        // OpenSCAD's parser overwrites a reassigned variable's expression *in place* (parser.y
+        // handle_assignment → Assignment::setExpr), so the last expression evaluates at the FIRST
+        // assignment's document position: lib's `y = x * 2;` reads the final x = 5 → y = 10. The
+        // root's `x = 5;` sits after a definition so the Customizer-prologue hoist leaves it in
+        // document order; emitting the winner at its own (last) slot would order `y = x * 2;`
+        // before any assignment of x and evaluate y as undef (the shape SB5008 flags).
+        var (bundled, diagnostics) = BundleHelper.Bundle(
+            null,
+            ("main.scad", "include <lib.scad>\nmodule m() cube(x);\nx = 5;\nm();"),
+            ("lib.scad", "x = 1;\ny = x * 2;"));
+
+        List<AssignmentStatement> assignments = [.. bundled.Statements.OfType<AssignmentStatement>()];
+        Assert.Collection(
+            assignments,
+            x =>
+            {
+                Assert.Equal("x", x.Name);
+                Assert.True(x.Value is NumberLiteral { Value: 5 }); // the last expression…
+                Assert.Equal("lib.scad", x.Span.File.Path);         // …at the first occurrence's slot
+            },
+            y => Assert.Equal("y", y.Name));
+
+        Assert.Contains(diagnostics, d => d.Code == DiagnosticCode.VariableReassigned);
+        Assert.DoesNotContain(diagnostics, d => d.Code == DiagnosticCode.ForwardReference);
+    }
+
+    [Fact]
     public void ForwardFunctionCall_DoesNotWarnSB5008()
     {
         // Definitions are scope-wide in OpenSCAD: an assignment may call a function defined later

@@ -68,7 +68,7 @@ A list-comprehension generator (`for` / `if` / `let` / `each` in their comprehen
 ### SB3003 — Variable reassigned (last-wins) *(Warning, Semantic)*
 - **Trigger**: the same variable is assigned more than once in a scope (including across `include`-merged files).
 - **Message**: `Variable '{name}' was assigned on line {first} but is overwritten; the last assignment wins.`
-- **Notes**: Mirrors OpenSCAD (`parser.y` `handle_assignment`). Variables are **not** sequential — the last assignment wins for the whole scope regardless of where the variable is read. See [Spec.md](Spec.md) "Definition & Variable Collisions".
+- **Notes**: Mirrors OpenSCAD (`parser.y` `handle_assignment`). Variables are **not** sequential — the last assignment wins for the whole scope regardless of where the variable is read. The bundler reproduces this positionally too: OpenSCAD overwrites the existing assignment's expression **in place** (`Assignment::setExpr`), so the inliner emits the winning expression at the **first** colliding occurrence's slot (the expression evaluates where the first assignment stood). See [Spec.md](Spec.md) "Definition & Variable Collisions".
 
 ### SB3004 — Definition redefined (last-wins) *(Warning, Semantic)*
 - **Trigger**: a module or function name is defined more than once in the same (merged) scope.
