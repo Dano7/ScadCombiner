@@ -6,22 +6,75 @@ You are picking up **ScadBundler**, an AST-based OpenSCAD file bundler (C# / .NE
 
 ## ▶ Next session — start here
 
-The attribution work, the Customizer computed-params regression fix, and the last-wins winner-position
-fix are **done** (see the "Done" sections below). Remaining post-v1 work, pick one:
+The **OpenSCAD integration harness is done and green** (this session — see below), as are the attribution
+work, the Customizer computed-params fix, and the last-wins position fix. Remaining post-v1 work, pick one:
 
-1. **OpenSCAD integration harness (V1–V3)** — now **de-risked**: the differential recipe was proven
-   manually on 2026-06-10 (see §"Post-v1 work") and has validated two regression classes end-to-end
-   (computed-params hoist; last-wins winner position). Wrap it in an env-gated `tests/ScadBundler.IntegrationTests`
-   project with skippable facts.
-2. **Obfuscator (`--obfuscate`)** — [Post-Demo-Plan.md](docs/Post-Demo-Plan.md) Item D (**vNext**). A
+1. **Obfuscator (`--obfuscate`)** — [Post-Demo-Plan.md](docs/Post-Demo-Plan.md) Item D (**vNext**). A
    thin layer over the always-namespace work: same candidate set + reference rewrite + prologue exemption,
    only the name *generator* changes. Must use **deterministic** ids (a counter), never memory addresses
    (those break goldens/idempotence). Design note: an obfuscated bundle should keep the **license block**
    (legal text must survive) even if the per-section banners are dropped.
-3. Broader post-v1: WASM/JSON API + "ScadBundler Live", real-world golden masters (BOSL2/NopSCADlib/
+2. Broader post-v1: WASM/JSON API + "ScadBundler Live", real-world golden masters (BOSL2/NopSCADlib/
    dotSCAD), emitter line-length wrapping. See §"Post-v1 work". The real-world golden masters now also
    exercise the attribution pass against genuine library license headers (BOSL2 is BSD-2-Clause,
-   NopSCADlib GPL-3.0).
+   NopSCADlib GPL-3.0) — and can ride the new differential harness for render equivalence.
+3. **Small focused follow-up:** [ForwardReferenceChecker.cs](src/ScadBundler.Core/Inlining/ForwardReferenceChecker.cs)
+   line coverage is ≈60% (see watch items) — bring it to the ≥95% bar.
+
+### Done this session (2026-06-10, session 3) — OpenSCAD integration harness; it caught a PrivateConstants bug
+
+**1. The integration harness (V1–V3) exists and runs on every `dotnet test`** when OpenSCAD is present:
+new **`tests/ScadBundler.IntegrationTests`** project (5th in the sln) wrapping the proven differential
+recipe in-process — render the original root to CSG (`openscad.com -o`), bundle via
+`Bundler.Bundle` + `Emitter.Emit` (exactly the CLI's wiring), render the bundle **from an
+otherwise-empty temp dir** (which also proves self-containment), then assert (a) **no new
+warning-class stderr** (`WARNING:`/`DEPRECATED:`/`ERROR:`/`TRACE:`; `in file …, line N` stripped;
+multiset, so deprecations may *disappear* but never appear), (b) **identical `ECHO:` output** (ordered),
+(c) **byte-identical `.csg`**. Failures keep all artifacts (bundle text, both CSGs/stderrs, bundle
+diagnostics) under `%TEMP%\ScadBundlerIntegration\…`; successes clean up.
+
+- **Gating:** `[OpenScadFact]` / `[OpenScadTheory(IntegrationRequirements.…)]` set xunit `Skip` at
+  discovery when a prerequisite is missing: the binary (`OPENSCAD_EXE`, else probe
+  `C:\Program Files\OpenSCAD\openscad.com` — always the `.com` console wrapper, never the GUI `.exe`),
+  the ground-truth checkout (`SCADBUNDLER_OPENSCAD_CHECKOUT`, default `C:\git\hub\openscad`), the real
+  projects (`SCADBUNDLER_REAL_PROJECTS`, default `C:\git\dan\SCAD`). `SCADBUNDLER_SKIP_INTEGRATION=1`
+  skips all. CI without OpenSCAD skips cleanly; `DifferentialAssert` has a `compareGeometry: false`
+  switch for future nondeterministic fixtures (`rands()`/`$t`).
+- **Suites (32 tests):** `VerificationBacklogTests` — **V1/V2/V3 all differentially verified** on new
+  checked-in fixtures `tests/Corpus/integration/V-001-child-children|V-002-use-scoping|V-003-assign-let`
+  (2021.01 still *evaluates* `child()`/`assign()`, emitting `DEPRECATED:` lines the bundle sheds; V-001
+  gives `first_only()` two children so `child()` ≡ `children(0)` is disambiguated from "all").
+  `ModuleCacheCorpusTests` — 8 positive `modulecache-tests` roots (error-path fixtures excluded by
+  design — SB4002 makes cycles hard errors where OpenSCAD tolerates self-`use`; `use-mcad` needs MCAD).
+  `ExampleCorpusTests` — 3 single-file `examples/` roots (parse→emit fidelity differential).
+  `RealProjectTests` — ForkedHolder, HexContainer, CleatArray, grow-tent-fan-mount, goews (all
+  deterministic; `*-combined`/`*.bundled` siblings are artifacts, not roots). `OpenScadStderrTests` —
+  binary-free unit tests of the stderr normalization (run in any environment).
+
+**2. The harness's first full run caught a real bug.** `includefrommodule.scad` (official fixture)
+bundled to a file that renders `cylinder(r=1)` instead of `r=5` — **silently**: zero stderr both sides
+(2021.01 doesn't even warn on the undef read); only the CSG byte-compare sees it. Root cause: a `use`d
+file's **private constants were collected from its textual file only**, but its definitions evaluate in
+its **FileContext = its include-merge** (`ScopeContext.cc`) — `use <modulewithinclude.scad>` where that
+file does `include <radius.scad>` and `mymodule` reads `RADIUS` dropped `RADIUS = 5;` entirely. Fix:
+
+- [SemanticAnalyzer.cs](src/ScadBundler.Core/Semantics/SemanticAnalyzer.cs): reachability edges are
+  recorded per **include closure** (`_includeClosures` built between the passes;
+  `IsInCurrentFileContext`), not per textual file; `_ownFileReferences` renamed `_fileContextReferences`.
+- [ISemanticModel.cs](src/ScadBundler.Core/Semantics/ISemanticModel.cs) / [SemanticModel.cs](src/ScadBundler.Core/Semantics/SemanticModel.cs):
+  new closure overload **`PrivateConstants(IReadOnlyList<SourceFile>)`** — seeds from every closure
+  file's exported callables and collects reached constants wherever in the closure they are declared;
+  the single-file overload delegates to it (unchanged behavior for single-file graphs).
+- [Inliner.cs](src/ScadBundler.Core/Inlining/Inliner.cs) `GatherUseImports`: constant neededness =
+  the **union** of `PrivateConstants(closure)` over all use targets — a file shared by two closures is
+  imported once but must carry a constant if *either* closure reaches it.
+- **Spec fixed too:** [Slice-4-Semantic.md](docs/slices/Slice-4-Semantic.md) §7 post-v1 amendment
+  ("own" = the file's include closure); V1–V3 marked verified in
+  [Development-Slices.md](docs/Development-Slices.md); corpus layout/TODO updated in
+  [Test-Corpus.md](docs/Test-Corpus.md).
+- **Tests:** `PrivateConstants_MergedClosure_ReachesConstantsDeclaredInIncludedFiles`
+  (`SemanticModelTests`), `Use_DefinitionReadingItsIncludesConstant_CarriesTheConstant`
+  (`Slice5BundleTests`, prefix-agnostic assertions). All `B-*` goldens unchanged. **621 tests.**
 
 ### Done this session (2026-06-10, session 2) — last-wins winner emit position + `keep-first` rationale docs
 
@@ -124,16 +177,20 @@ truth verified at `C:\git\hub\openscad`.
 
 - **Slices 1–6 done** + **post-demo Items A/B/C** + **post-v1 #1–#4** (the attribution pass — license
   aggregation + provenance banners) + the Customizer computed-params regression fix (SB5008) + the
-  last-wins winner-position fix:
-  `dotnet build` zero-warning (warnings-as-errors), `dotnet test` green (**582 tests**: 562 in
-  `ScadBundler.Core.Tests`, 20 in `ScadBundler.Cli.Tests`). Coverage: `Lexing/`≈98%, `Parsing/`≈99%, `Semantics/` 100%, `Loading/`≈98.8%,
-  `Inlining/`≈99.6% (**`Attribution.cs` 100%**), `Emitting/`: `Emitter.cs`≈97%, `EmitOptions.cs` 100%.
+  last-wins winner-position fix + **the OpenSCAD integration harness** + the PrivateConstants
+  include-closure fix:
+  `dotnet build` zero-warning (warnings-as-errors), `dotnet test` green (**621 tests**: 569 in
+  `ScadBundler.Core.Tests`, 20 in `ScadBundler.Cli.Tests`, 32 in `ScadBundler.IntegrationTests`).
+  Coverage: `Lexing/`≈98%, `Parsing/`≈99%, `Semantics/` 100% (incl. the new closure code), `Loading/`≈98.8%,
+  `Inlining/`: `Attribution`/`StructuralKey`/`Bundler` 100%, `BundleRewriter`≈99.6%, `Inliner.cs`≈98%,
+  **`ForwardReferenceChecker.cs`≈60% (known gap — see watch items)**, `Emitting/`: `Emitter.cs`≈97%,
+  `EmitOptions.cs` 100%.
 - **Post-demo (this session), see [docs/Post-Demo-Plan.md](docs/Post-Demo-Plan.md):**
   - **A — Customizer parameters preserved.** The root file's leading **literal** parameter assignments are hoisted to the top of the bundle (verbatim, never renamed) and a synthesized `/* [Hidden] */` fences the rest, so OpenSCAD's Customizer shows the model's real knobs instead of an included library's globals. Computed assignments are not parameters (OpenSCAD `Expression::isLiteral` gate) and keep their document position — see "Done earlier (2026-06-10, session 1)". Verified on `C:\git\dan\SCAD\ForkedHolder.scad`. ([Inliner.cs](src/ScadBundler.Core/Inlining/Inliner.cs); goldens `slice5-bundle/B-008`, `B-009`.)
   - **B — OpenSCAD-faithful search paths.** New [OpenScadEnvironment.cs](src/ScadBundler.Core/Loading/OpenScadEnvironment.cs) reconstructs OpenSCAD's `parser_init` order: absolutized `OPENSCADPATH` (empty→CWD) + the per-user library folder. Wired through `Bundler`/`BundleCommand`.
   - **C (`--qualify-all`)** and **D (obfuscator, vNext)** remain scoped but unimplemented.
-- Branch is **`Claude_implementation`**. Last feature commit: `e61c1ff fix(inliner): emit last-wins variable expression at first assignment position` (2026-06-10).
-- **Projects:** `src/ScadBundler.Core` (the library), **`src/ScadBundler`** (the CLI, `PackAsTool` → `scadbundler`), `tests/ScadBundler.Core.Tests`, **`tests/ScadBundler.Cli.Tests`**. All four are in `ScadBundler.sln`.
+- Branch is **`Claude_implementation`**. Last feature commits (2026-06-10, session 3): `fix(semantics): collect use'd private constants over the include closure` + `feat(tests): add OpenSCAD differential integration harness (V1–V3)`.
+- **Projects:** `src/ScadBundler.Core` (the library), **`src/ScadBundler`** (the CLI, `PackAsTool` → `scadbundler`), `tests/ScadBundler.Core.Tests`, **`tests/ScadBundler.Cli.Tests`**, **`tests/ScadBundler.IntegrationTests`** (env-gated differential harness). All five are in `ScadBundler.sln`.
 - **Entry points:** `Bundler.Bundle(rootPath, options)` (disk + `OPENSCADPATH`) → `BundleResult`; `Emitter.Emit(scadFile, EmitOptions?)` → `string`. The CLI wires them in `src/ScadBundler/BundleCommand.cs`.
 
 ## What Slice 6 added
@@ -160,6 +217,13 @@ truth verified at `C:\git\hub\openscad`.
   `/* [Group] */` directly above a *computed* assignment, the marker stays in the body with it, and the
   following hoisted literals fall under the previous group in the Customizer. Markers above literal
   assignments (the normal case, incl. author `/* [Hidden] */`) hoist correctly with their parameter.
+- **`ForwardReferenceChecker.cs` line coverage ≈60%** *(pre-existing; surfaced by this session's
+  coverage pass — the earlier "`Inlining/`≈99.6%" claim glossed it)*: lines 115–208, the read-walk
+  exemption branches (function-literal bodies/defaults, `let`/`for`/comprehension shadowing, `$`-vars),
+  are untested. Below the ≥95% bar; a small focused session.
+- **V-001/V-003 integration fixtures need a binary that still evaluates `child()`/`assign()`** — the
+  installed 2021.01 does (as `DEPRECATED:`). A future OpenSCAD that removes them would fail those two
+  facts (V-001 would render without the child geometry); point `OPENSCAD_EXE` at a 2021.01 install.
 
 - ~~**`BundleOptions.BundleLicenses` is not read by the `Inliner`** (silent no-op).~~ **Resolved (this
   session):** the attribution pass implements it, **default on** — see "Done this session".
@@ -175,7 +239,11 @@ truth verified at `C:\git\hub\openscad`.
 
 - **WASM/JSON API + "ScadBundler Live"** web companion (the Core is dependency-free and consumable for this).
 - **Real-world golden masters**: small slices of BOSL2 / NopSCADlib / dotSCAD.
-- **Integration harness (V1–V3)** against the official OpenSCAD C++ engine (test-only; render-equivalence). Ground truth checkout at `C:\git\hub\openscad`; fixtures in its `examples/` and `tests/data/modulecache-tests/`, plus Dan's real projects in `C:\git\dan\SCAD\`. **Recipe proven manually (2026-06-10):** the binary is at `C:\Program Files\OpenSCAD\openscad.com` (the `.com` console wrapper gives proper stderr); per root: (1) `openscad.com -o original.csg root.scad` (fast — stops after CSG generation, no CGAL render), (2) bundle, (3) `openscad.com -o bundled.csg bundle.scad`, (4) assert the bundle adds **no new `WARNING:` stderr lines** (strip file/line before diffing) and the two `.csg` files are **byte-identical** (CSG is fully elaborated geometry, so namespacing renames never appear). Caveats: `rands()`/`$t` models are nondeterministic → warning-diff only; gate the project on an `OPENSCAD_EXE` env var with a default-path probe and skippable facts so CI without OpenSCAD skips. This exact loop catches the computed-params and last-wins-position classes of regression instantly (both proven 2026-06-10).
+- ~~**Integration harness (V1–V3)** against the official OpenSCAD C++ engine~~ — **done (2026-06-10,
+  session 3):** the recipe that used to live in this bullet is now executable code in
+  `tests/ScadBundler.IntegrationTests` (`DifferentialAssert` + `OpenScadCli`/`OpenScadStderr`); the
+  official fixtures and Dan's real projects run differentially on every `dotnet test` when OpenSCAD is
+  present. See "Done this session (2026-06-10, session 3)".
 - Line-length wrapping in the emitter (`MaxLineLength` is advisory today). (`--bundle-licenses`
   aggregation is **done** — this session.)
 

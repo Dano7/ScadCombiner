@@ -73,6 +73,14 @@ Behaviors decided in design that must be confirmed against the official OpenSCAD
 - **V2** *(resolved from source — `ScopeContext.cc`; now a regression guard)* — A `use`d definition sees its own file's constants and the using file cannot override them. Confirms the `use` private-constant + namespace rule.
 - **V3** — `assign(...)` ≡ `let(...)` for binding-preserving rewrite. Gates SB5001.
 
+**Status: all three verified (2026-06-10)** by differential render equivalence — byte-identical CSG plus
+no new warning-class stderr — against the official binary (OpenSCAD 2021.01) via
+`tests/ScadBundler.IntegrationTests` (`VerificationBacklogTests`; fixtures `tests/Corpus/integration/V-00*`).
+V1/V3 rely on 2021.01 still *evaluating* the deprecated constructs (it does, as `DEPRECATED:` warnings the
+bundle is allowed to shed). The harness's first full run also caught a real gap — a `use`d file's
+private constants must be collected over its **include closure** (its FileContext), not its textual file —
+now fixed (see [slices/Slice-4-Semantic.md](slices/Slice-4-Semantic.md) §7 amendment).
+
 ## Slice 6: Emitter & CLI ✓ **spec ready**
 
 Full spec: **[slices/Slice-6-Emitter-CLI.md](slices/Slice-6-Emitter-CLI.md)** — the capstone (completes the pipeline end-to-end).

@@ -36,8 +36,9 @@ tests/
     slice4-semantic/<id>/   input.scad           expected.diag
     slice5-bundle/<id>/     main.scad  <lib>.scad  options.txt  expected.scad  expected.diag
     slice6-emit/<id>/       input.scad           expected.scad
-  Integration/              # test-only project, requires OpenSCAD on PATH
-    V1-child/  V2-use-consts/  V3-assign-let/
+    integration/<id>/       main.scad  [<lib>.scad …]   # no expected.* — the expectation is render equivalence
+  ScadBundler.IntegrationTests/     # the differential harness (env-gated: OPENSCAD_EXE or the default
+                                    # install; skips itself when OpenSCAD is absent)
 ```
 
 - `options.txt` (bundle cases): the CLI args after `bundle main.scad`, one token per line (e.g. `--on-collision`, `prefix`). Empty/absent = defaults.
@@ -516,8 +517,8 @@ Each locked decision maps to at least one binding case and, where behavioral, an
 - [ ] Bundle: cycle detection, search-path/`OPENSCADPATH`, dedup (identical module hashing), all `--on-collision` strategies, license aggregation
 - [x] Emitter: per-node formatting, precedence parenthesization, `--minify`, brace/indent style, Customizer trivia (EM-001), idempotence (EM-002), and the `B-001`..`B-007` exact goldens (`slice6-emit/` + `slice5-bundle/*/expected.scad`); line-length wrapping + license-header aggregation remain post-v1
 - [ ] Real-world golden masters: small slices of BOSL2 / NopSCADlib / dotSCAD
-- [ ] Adopt OpenSCAD `tests/data/modulecache-tests` (cycles, use/include, overload) + `examples/` (~50 valid files) as parser + integration fixtures
-- [ ] Integration harness wired for V1–V3
+- [x] Adopt OpenSCAD `tests/data/modulecache-tests` + `examples/` — the positive modulecache roots (8) and three example files are now differentially rendered by the integration harness; the broader examples sweep stays in `ParserRealWorldTests` (error-path modulecache fixtures excluded by design: SB4002 makes cycles hard errors where OpenSCAD silently tolerates them)
+- [x] Integration harness wired for V1–V3 (`tests/ScadBundler.IntegrationTests`, fixtures `tests/Corpus/integration/V-00*`; all three verified against OpenSCAD 2021.01 — byte-identical CSG, no new warnings)
 
 ---
 

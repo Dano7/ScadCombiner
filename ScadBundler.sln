@@ -15,6 +15,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ScadBundler", "src\ScadBund
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ScadBundler.Cli.Tests", "tests\ScadBundler.Cli.Tests\ScadBundler.Cli.Tests.csproj", "{0C455012-4726-4BB8-A6C4-4955BB933CE8}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ScadBundler.IntegrationTests", "tests\ScadBundler.IntegrationTests\ScadBundler.IntegrationTests.csproj", "{03DC01AD-3796-4DA4-BB3E-88B4C4EAC049}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -73,6 +75,18 @@ Global
 		{0C455012-4726-4BB8-A6C4-4955BB933CE8}.Release|x64.Build.0 = Release|Any CPU
 		{0C455012-4726-4BB8-A6C4-4955BB933CE8}.Release|x86.ActiveCfg = Release|Any CPU
 		{0C455012-4726-4BB8-A6C4-4955BB933CE8}.Release|x86.Build.0 = Release|Any CPU
+		{03DC01AD-3796-4DA4-BB3E-88B4C4EAC049}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{03DC01AD-3796-4DA4-BB3E-88B4C4EAC049}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{03DC01AD-3796-4DA4-BB3E-88B4C4EAC049}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{03DC01AD-3796-4DA4-BB3E-88B4C4EAC049}.Debug|x64.Build.0 = Debug|Any CPU
+		{03DC01AD-3796-4DA4-BB3E-88B4C4EAC049}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{03DC01AD-3796-4DA4-BB3E-88B4C4EAC049}.Debug|x86.Build.0 = Debug|Any CPU
+		{03DC01AD-3796-4DA4-BB3E-88B4C4EAC049}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{03DC01AD-3796-4DA4-BB3E-88B4C4EAC049}.Release|Any CPU.Build.0 = Release|Any CPU
+		{03DC01AD-3796-4DA4-BB3E-88B4C4EAC049}.Release|x64.ActiveCfg = Release|Any CPU
+		{03DC01AD-3796-4DA4-BB3E-88B4C4EAC049}.Release|x64.Build.0 = Release|Any CPU
+		{03DC01AD-3796-4DA4-BB3E-88B4C4EAC049}.Release|x86.ActiveCfg = Release|Any CPU
+		{03DC01AD-3796-4DA4-BB3E-88B4C4EAC049}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -82,5 +96,6 @@ Global
 		{E43B8764-D378-43F3-9EC0-4B95E9A66769} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 		{2BCC0945-220F-4C82-8D57-EF6A31CE4918} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{0C455012-4726-4BB8-A6C4-4955BB933CE8} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
+		{03DC01AD-3796-4DA4-BB3E-88B4C4EAC049} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 	EndGlobalSection
 EndGlobal
