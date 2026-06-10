@@ -345,9 +345,8 @@ addition.
 
 - **Item A**: no new severity-level code for the default rearrangement; collisions on a protected name
   reuse SB5004/SB3003/SB3004. (If a `--verbose`-only Info marker is later wanted, catalog it in
-  [Diagnostics.md](Diagnostics.md) first — next free is **SB5007**, but coordinate with
-  [Post-v1-Plan.md](Post-v1-Plan.md), which earmarked SB5007 for license aggregation; whichever lands
-  first claims it.)
+  [Diagnostics.md](Diagnostics.md) first — **SB5007 is now claimed** by license aggregation
+  ([Post-v1-Plan.md](Post-v1-Plan.md) #2, done); next free is **SB5008**.)
 - **Items C/D**: reuse **SB5004 (NameRenamed)** — no new codes.
 
 ## Recommended sequence

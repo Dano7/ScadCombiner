@@ -12,7 +12,7 @@ scadbundler bundle <input.scad> [options]
 - `-p, --library-path <paths>`: Additional search paths (comma-separated or multiple flags). Respects OPENSCADPATH env var.
 - `--on-collision <strategy>`: `auto`|`prefix`|`error`|`keep-first`|`keep-last` (default: **`auto`** = origin-dependent — `keep-last` for `include` collisions to match OpenSCAD's native last-wins, `prefix` for `use`d-library collisions to preserve library isolation; see [Spec.md](Spec.md) "Collision-strategy implication"). Any value other than `auto` forces that one strategy everywhere.
 - `--preserve-comments`: Keep all comments (default: true)
-- `--bundle-licenses`: Aggregate license headers
+- `--[no-]bundle-licenses`: Aggregate every bundled file's leading header/license comments at the top of the output (encounter order, root first, deduplicated — moved, not copied) and insert one-line provenance banners (`// ======== include <lib.scad> ========`) between the inlined sections (default: **on**; SB5007). The downloader of a bundled model sees whose code each section is and under what terms — `--no-bundle-licenses` produces an unannotated bundle, and `--minify`/`--no-preserve-comments` drop the annotations like any comment.
 - `--minify`: Remove unnecessary whitespace/comments
 - `--dry-run`: Show what would be done without writing output
 - `--verbose`: Detailed logging of inlined files and transformations

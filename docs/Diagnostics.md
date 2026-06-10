@@ -123,6 +123,12 @@ A list-comprehension generator (`for` / `if` / `let` / `each` in their comprehen
 - **Message**: `Collision: {module|function|variable} '{name}' is also defined at {file}:{line}; no output is produced under '--on-collision error'.`
 - **Notes**: only `--on-collision error` raises this; `auto`/`keep-first`/`keep-last` resolve silently or with SB3003/SB3004 warnings, and `prefix` namespaces via SB5004. A structural duplicate (SB5005) is not a collision and does not trigger it.
 
+### SB5007 — File headers/licenses aggregated *(Info, Inliner)*
+- **Trigger**: at least one **non-root** file's leading header/license comments were hoisted into the bundle's aggregated top header block (the default-on `--bundle-licenses` attribution pass).
+- **Action**: each file's header run — the leading comments of its first statement (or the EOF comments of a comments-only file), cut at the first Customizer group marker `/* [Name] */` — is **moved** to the top of the bundle in include/use encounter order (root's own header first, unframed; non-root headers in a delimited, labeled block) and deduplicated by normalized text. One-line provenance banners (`// ======== include <lib.scad> ========`, with `(continued)` on re-entry) additionally separate the inlined sections. Fires once per bundle.
+- **Message**: `Aggregated {n} file header(s) into the bundle header.`
+- **Notes**: a root-only header hoist does not fire this (it is positionally a no-op). `--no-bundle-licenses` disables the whole pass; `--minify`/`--no-preserve-comments` drop the block and banners like any comment. Group markers always stay with the parameter they precede, so the Customizer UI is unaffected.
+
 ### SB6001 — Emitter self-check failure *(Error, Emitter — internal)*
 - **Trigger**: emitted output fails to re-parse to an equivalent AST (an internal emitter bug; should never occur in production).
 - **Message**: `Internal: emitted output failed to re-parse.`

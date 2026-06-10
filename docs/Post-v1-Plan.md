@@ -15,10 +15,10 @@ blur review and strain the quality bar (warnings-as-errors, goldens, "fix the sp
 
 | # | Item | Type | Effort | Risk | Disposition |
 |---|------|------|--------|------|-------------|
-| 1 | `--on-collision error` hard-fail | Bug (cosmetic) | S | Low | **Done** (this session) |
-| 2 | License aggregation (`--bundle-licenses`) | Feature | M | Low | Own session — do next |
-| 3 | `include`/`use` leading trivia dropped on flatten | Bug | S–M | Low | Fold into #2 |
-| 4 | Cross-`include` mis-bind under non-`Auto` strategies | Correctness bug | M | **High** | **Done** (this session) |
+| 1 | `--on-collision error` hard-fail | Bug (cosmetic) | S | Low | **Done** |
+| 2 | License aggregation (`--bundle-licenses`) | Feature | M | Low | **Done** (+ provenance banners; default **on**) |
+| 3 | `include`/`use` leading trivia dropped on flatten | Bug | S–M | Low | **Done** (header runs; folded into #2) |
+| 4 | Cross-`include` mis-bind under non-`Auto` strategies | Correctness bug | M | **High** | **Done** |
 | 5 | Block-scope duplicate detection (SB3003/SB3004) | Design deferral | M | Med (false positives) | **Keep deferred** — revisit on demand |
 
 ---
@@ -65,6 +65,30 @@ blur review and strain the quality bar (warnings-as-errors, goldens, "fix the sp
 - **Effort:** Medium. **Risk:** Low (off by default; purely additive trivia).
 - **Disposition:** do this next; it is the most user-visible, self-contained win.
 
+### Resolved (attribution pass — license aggregation + provenance banners, default **on**)
+
+- **Scope grew deliberately** (user decision): beyond hoisting licenses, the bundle is now *attributed* —
+  one-line provenance banners (`// ======== include <lib.scad> ========`, `use <…>`, `(continued)` on
+  re-entry) separate the inlined sections so a curious reader can map the bundle back to the original
+  project. Both ride one switch, now **default on** (`--no-bundle-licenses` opts out): the audience of a
+  bundled file is the *downloader* on Thingiverse/MakerWorld, who never sees CLI flags, and silently
+  stripping library authors' license headers was the wrong default.
+- **Mechanics:** new [Attribution.cs](../src/ScadBundler.Core/Inlining/Attribution.cs) walks the
+  `LoadGraph` in encounter order (each file's include/use edges by source offset, depth-first, root
+  first), collecting each file's **header run** — the leading comments of its first statement (or the
+  EOF trivia of a comments-only file), cut at the first Customizer group marker `/* [Name] */` so the
+  Customizer UI is untouched. Runs are deduplicated by normalized text and **moved** (stripped from
+  their original statements): the root's header leads unframed, non-root headers follow in a delimited
+  block labeled with the `include <…>`/`use <…>` statement that pulled each file in. Banners are
+  applied at assembly by watching `Span.File` change between consecutive emitted statements (spans
+  survive every rewrite, so this is structural, not inferred). **SB5007** (Info) fires once when ≥1
+  non-root header is aggregated; cataloged in [Diagnostics.md](Diagnostics.md).
+- **Tests/goldens:** `AttributionTests` (hoist order, dedup-everywhere-strip, group-marker cutoff,
+  banner change-tracking + `(continued)`, use-labeling, comments-only file via EOF trivia, off-switch,
+  error-strategy suppression); corpus **`B-010-license-aggregation`** (two licensed libs via
+  include+use, diamond include, dedup, full annotated golden); CLI default-on/`--no-bundle-licenses`
+  tests. All `B-*` goldens re-blessed with banners; `Attribution` 100% line coverage.
+
 ---
 
 ## 3. `include`/`use` leading trivia dropped on flatten
@@ -76,6 +100,9 @@ blur review and strain the quality bar (warnings-as-errors, goldens, "fix the sp
   collection step. General trivia preservation on dropped `include`/`use` lines is a strict superset.
 - **Disposition:** **fold into #2.** Handle license headers there; only pursue general
   include-line-comment preservation if a concrete need appears (it risks duplicating now-inlined banners).
+- **Resolved with #2:** a header riding the root's first `include`/`use` line is the root's *header run*
+  and is hoisted to the top by the attribution pass. Comments above a **non-first** include/use line are
+  still dropped (the documented strict-superset case; revisit only on a concrete need).
 
 ---
 
@@ -148,8 +175,9 @@ blur review and strain the quality bar (warnings-as-errors, goldens, "fix the sp
 ## Recommended sequence
 
 1. ~~`--on-collision error` hard-fail~~ — **done**.
-2. ~~**Cross-`include` mis-bind (#4)**~~ — **done** (this session; prerequisite for always-namespace `use`).
-3. **License aggregation (#2, absorbing #3)** — additive, low-risk, user-visible.
+2. ~~**Cross-`include` mis-bind (#4)**~~ — **done** (prerequisite for always-namespace `use`).
+3. ~~**License aggregation (#2, absorbing #3)**~~ — **done** (attribution pass: license aggregation +
+   provenance banners, default on; SB5007).
 4. **Block-scope duplicate detection (#5)** — leave deferred; revisit only if a real file demands it.
 
 Broader post-v1 scope (WASM/JSON API + "ScadBundler Live", real-world golden masters, OpenSCAD

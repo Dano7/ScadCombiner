@@ -126,7 +126,7 @@ internal static class BundleCommand
 
         public CollisionStrategy OnCollision { get; set; } = CollisionStrategy.Auto;
 
-        public bool BundleLicenses { get; set; }
+        public bool BundleLicenses { get; set; } = true;
 
         public bool PreserveComments { get; set; } = true;
 
@@ -187,6 +187,9 @@ internal static class BundleCommand
                     break;
                 case "--bundle-licenses":
                     options.BundleLicenses = true;
+                    break;
+                case "--no-bundle-licenses":
+                    options.BundleLicenses = false;
                     break;
                 case "--preserve-comments":
                     options.PreserveComments = true;
@@ -393,7 +396,8 @@ internal static class BundleCommand
           -o, --output <file>        Output path (default <input>.bundled.scad; '-' = stdout)
           -p, --library-path <p>     Extra search path (repeatable or comma-separated)
           --on-collision <strategy>  auto|prefix|error|keep-first|keep-last (default auto)
-          --bundle-licenses          Aggregate license headers
+          --[no-]bundle-licenses     Aggregate file headers/licenses at the top and add
+                                     provenance banners between inlined sections (default on)
           --[no-]preserve-comments   Keep comments (default on)
           --minify                   Emit shortest equivalent text (drops comments)
           --dry-run                  Run the pipeline but write nothing

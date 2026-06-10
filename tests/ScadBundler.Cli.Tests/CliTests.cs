@@ -28,8 +28,13 @@ public sealed class CliTests
         Assert.Equal(0, exit);
         Assert.Equal(string.Empty, stderr);
         // main.scad declares no Customizer parameters of its own, so the library's globals are fenced
-        // out of the Customizer with a synthesized `/* [Hidden] */` boundary at the top.
-        Assert.Equal("/* [Hidden] */\nWALL = 2;\nmodule box() cube(WALL);\ncube(99);\nbox();\n", stdout);
+        // out of the Customizer with a synthesized `/* [Hidden] */` boundary at the top; the default-on
+        // attribution pass banners each inlined section with the statement that pulled it in.
+        Assert.Equal(
+            "/* [Hidden] */\n// ======== include <lib.scad> ========\n"
+            + "WALL = 2;\nmodule box() cube(WALL);\ncube(99);\n"
+            + "\n// ======== main.scad ========\nbox();\n",
+            stdout);
     }
 
     [Fact]
@@ -129,6 +134,49 @@ public sealed class CliTests
 
         Assert.Equal(0, exit);
         Assert.Equal("cube(1);\n", stdout);
+    }
+
+    [Fact]
+    public void BundleLicenses_DefaultOn_AggregatesHeadersAndReportsSb5007()
+    {
+        using var project = new TempProject(
+            ("main.scad", "// (c) Root Author, CC-BY-4.0\ninclude <lib.scad>\nbox();"),
+            ("lib.scad", "// (c) Lib Author, MIT\nmodule box() cube(1);"));
+
+        int exit = Run(project, ["bundle", project.Path("main.scad"), "-o", "-"], out string stdout, out string stderr);
+
+        Assert.Equal(0, exit);
+        Assert.Contains("SB5007", stderr, StringComparison.Ordinal);
+        Assert.Equal(
+            "// (c) Root Author, CC-BY-4.0\n"
+            + "// ======== file headers & licenses aggregated by ScadBundler ========\n"
+            + "// -------- include <lib.scad> --------\n"
+            + "// (c) Lib Author, MIT\n"
+            + "// ====================================================================\n"
+            + "// ======== include <lib.scad> ========\n"
+            + "module box() cube(1);\n"
+            + "\n// ======== main.scad ========\nbox();\n",
+            stdout);
+    }
+
+    [Fact]
+    public void NoBundleLicenses_ProducesUnannotatedBundle()
+    {
+        using var project = new TempProject(
+            ("main.scad", "// (c) Root Author, CC-BY-4.0\ninclude <lib.scad>\nbox();"),
+            ("lib.scad", "// (c) Lib Author, MIT\nmodule box() cube(1);"));
+
+        int exit = Run(
+            project,
+            ["bundle", project.Path("main.scad"), "-o", "-", "--no-bundle-licenses"],
+            out string stdout,
+            out string stderr);
+
+        Assert.Equal(0, exit);
+        Assert.Equal(string.Empty, stderr);
+        // Pre-attribution behavior: the library header stays where it was and the root's header
+        // (riding the flattened include line) is dropped — exactly what the default now prevents.
+        Assert.Equal("// (c) Lib Author, MIT\nmodule box() cube(1);\nbox();\n", stdout);
     }
 
     [Fact]

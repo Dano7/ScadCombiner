@@ -110,6 +110,12 @@ public static class DiagnosticCode
     /// </summary>
     public const string CollisionError = "SB5006";
 
+    /// <summary>
+    /// Non-root file headers/licenses were hoisted into the bundle's aggregated top header block
+    /// (the default-on <c>--bundle-licenses</c> attribution pass).
+    /// </summary>
+    public const string LicensesAggregated = "SB5007";
+
     // Emitting (SB6xxx)
 
     /// <summary>

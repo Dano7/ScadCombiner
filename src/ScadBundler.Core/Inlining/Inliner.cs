@@ -14,7 +14,10 @@ namespace ScadBundler.Core.Inlining;
 /// collisions (last-wins / namespace), deduplicate structurally-identical defs, normalize deprecated
 /// constructs, and assemble. Assembly hoists the root file's Customizer parameter prologue to the top
 /// (verbatim, never renamed) and fences everything else behind a synthesized <c>/* [Hidden] */</c>, so
-/// OpenSCAD's Customizer still shows the model's parameters. Never throws — every problem is a diagnostic.
+/// OpenSCAD's Customizer still shows the model's parameters. With <see cref="BundleOptions.BundleLicenses"/>
+/// (default on), the <see cref="Attribution"/> pass additionally hoists every bundled file's leading
+/// header/license comments into a deduplicated block at the very top (SB5007) and separates the inlined
+/// sections with one-line provenance banners. Never throws — every problem is a diagnostic.
 /// </summary>
 public static class Inliner
 {
@@ -66,6 +69,7 @@ public static class Inliner
         private readonly Dictionary<AstNode, string> _renames = new(ReferenceEqualityComparer.Instance);
         private readonly HashSet<AstNode> _winners = new(ReferenceEqualityComparer.Instance);
         private readonly HashSet<string> _takenNames = new(StringComparer.Ordinal);
+        private Attribution? _attribution;
         private bool _errorCollision;
 
         public Run(LoadGraph graph, ISemanticModel model, BundleOptions options)
@@ -78,6 +82,10 @@ public static class Inliner
         public (ScadFile Bundled, IReadOnlyList<Diagnostic> Diagnostics) Execute()
         {
             LoadedFile root = _graph.Root;
+
+            // Phase L — attribution (default-on --bundle-licenses): collect every file's leading
+            // header/license comments (encounter order, root first) + per-file provenance labels.
+            _attribution = _options.BundleLicenses ? Attribution.Collect(_graph) : null;
 
             // Phase A0 — the root's Customizer parameter prologue (hoisted to the top; never renamed).
             var prologueNodes = new HashSet<AstNode>(ReferenceEqualityComparer.Instance);
@@ -97,6 +105,15 @@ public static class Inliner
             // Phases E/F — assemble + single rewrite pass (renames + normalization).
             var rewriter = new BundleRewriter(_renames, _diagnostics);
             ScadFile bundled = Assemble(root, fontUses, useItems, rootFlat, prologue, prologueNodes, rewriter);
+
+            if (_attribution is { AggregatedHeaderCount: > 0 } && !_errorCollision)
+            {
+                _diagnostics.Info(
+                    DiagnosticCode.LicensesAggregated,
+                    $"Aggregated {_attribution.AggregatedHeaderCount.ToString(CultureInfo.InvariantCulture)} "
+                    + "file header(s) into the bundle header.",
+                    root.Ast.Span);
+            }
 
             IReadOnlyList<Diagnostic> sorted = Sort(_diagnostics.ToList());
             return (bundled, sorted);
@@ -610,6 +627,35 @@ public static class Inliner
 
             var emitted = new HashSet<AstNode>(ReferenceEqualityComparer.Instance);
 
+            // Provenance-banner state (attribution on): a one-line banner marks every change of origin
+            // file between consecutive emitted statements; a re-entered file is "(continued)".
+            SourceFile currentOrigin = root.Source;
+            var appearedOrigins = new HashSet<SourceFile>();
+
+            Statement Finish(Statement statement, bool banner)
+            {
+                statement = StripHoisted(statement);
+                if (_attribution is null)
+                {
+                    return statement;
+                }
+
+                SourceFile origin = statement.Span.File;
+                if (origin == SourceFile.Synthesized)
+                {
+                    return statement; // no real origin: stays in the current section
+                }
+
+                if (banner && origin != currentOrigin)
+                {
+                    statement = WithSectionBanner(statement, _attribution.LabelFor(origin), appearedOrigins.Contains(origin));
+                }
+
+                currentOrigin = origin;
+                appearedOrigins.Add(origin);
+                return statement;
+            }
+
             // The Customizer parameter prologue leads, verbatim (never renamed, so its names stay
             // user-facing). It is exempt from collision/dedup dropping — it is always emitted here.
             var statements = new List<Statement>();
@@ -617,7 +663,7 @@ public static class Inliner
             {
                 if (emitted.Add(parameter))
                 {
-                    statements.Add(rewriter.RewriteStatement(parameter));
+                    statements.Add(Finish(rewriter.RewriteStatement(parameter), banner: false));
                 }
             }
 
@@ -625,14 +671,14 @@ public static class Inliner
             var rest = new List<Statement>();
             foreach (UseStatement font in fontUses)
             {
-                rest.Add(font); // a binary font cannot be inlined — preserved verbatim
+                rest.Add(Finish(font, banner: true)); // a binary font cannot be inlined — preserved verbatim
             }
 
             foreach (Candidate item in useItems)
             {
                 if (_winners.Contains(item.Node) && emitted.Add(item.Node))
                 {
-                    rest.Add(rewriter.RewriteStatement(item.Node));
+                    rest.Add(Finish(rewriter.RewriteStatement(item.Node), banner: true));
                 }
             }
 
@@ -651,7 +697,7 @@ public static class Inliner
                     }
                 }
 
-                rest.Add(rewriter.RewriteStatement(statement));
+                rest.Add(Finish(rewriter.RewriteStatement(statement), banner: true));
             }
 
             // Fence the remaining top-level assignments out of the Customizer with a synthesized
@@ -663,6 +709,17 @@ public static class Inliner
             }
 
             statements.AddRange(rest);
+
+            // The aggregated header/license block leads the whole bundle (above the fence and any
+            // banner): the root's own header verbatim, then each distinct non-root header, labeled.
+            if (_attribution is { HeaderBlock.Count: > 0 } && statements.Count > 0)
+            {
+                statements[0] = statements[0] with
+                {
+                    LeadingTrivia = [.. _attribution.HeaderBlock, .. statements[0].LeadingTrivia],
+                };
+            }
+
             return new ScadFile(root.Source, statements);
         }
 
@@ -673,6 +730,35 @@ public static class Inliner
         {
             var fence = new CommentTrivia("/* [Hidden] */", CommentKind.Block) { Span = SourceSpan.Synthetic };
             var leading = new List<Trivia>(statement.LeadingTrivia.Count + 1) { fence };
+            leading.AddRange(statement.LeadingTrivia);
+            return statement with { LeadingTrivia = leading, BlankLineBefore = true };
+        }
+
+        // Removes header trivia the attribution pass hoisted into the bundle's top block, so a license
+        // is moved — never duplicated mid-bundle. No-op when attribution is off or nothing matches.
+        private Statement StripHoisted(Statement statement)
+        {
+            if (_attribution is not { } attribution
+                || statement.LeadingTrivia.Count == 0
+                || !statement.LeadingTrivia.Any(attribution.IsHoisted))
+            {
+                return statement;
+            }
+
+            return statement with
+            {
+                LeadingTrivia = [.. statement.LeadingTrivia.Where(t => !attribution.IsHoisted(t))],
+            };
+        }
+
+        // Prepends the one-line provenance banner that opens a new origin section, e.g.
+        // `// ======== use <gears.scad> ========` — the label echoes the statement that pulled the
+        // file in, so a curious reader can map each section back to the original project layout.
+        private static Statement WithSectionBanner(Statement statement, string label, bool continued)
+        {
+            string text = $"// ======== {label}{(continued ? " (continued)" : string.Empty)} ========";
+            var banner = new CommentTrivia(text, CommentKind.Line) { Span = SourceSpan.Synthetic };
+            var leading = new List<Trivia>(statement.LeadingTrivia.Count + 1) { banner };
             leading.AddRange(statement.LeadingTrivia);
             return statement with { LeadingTrivia = leading, BlankLineBefore = true };
         }
