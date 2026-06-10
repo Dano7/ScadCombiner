@@ -106,6 +106,10 @@ public static class Inliner
             var rewriter = new BundleRewriter(_renames, _diagnostics);
             ScadFile bundled = Assemble(root, fontUses, useItems, rootFlat, prologue, prologueNodes, rewriter);
 
+            // Safety net over the final statement order: no top-level assignment may read a variable
+            // first assigned later in the bundle (SB5008) — guards the hoist/splice phases above.
+            ForwardReferenceChecker.Check(bundled.Statements, _diagnostics);
+
             if (_attribution is { AggregatedHeaderCount: > 0 } && !_errorCollision)
             {
                 _diagnostics.Info(
@@ -126,6 +130,12 @@ public static class Inliner
         // cutoff; hoisting this prologue back to the top (and fencing the rest with '/* [Hidden] */' in
         // Assemble) restores them. Leading include/use/empty statements are skipped; the run ends at the
         // first definition, instantiation, or control-flow/block statement.
+        //
+        // Only literal assignments are hoisted: a computed assignment (e.g. `x = lib_constant;`) is not
+        // a Customizer parameter to begin with, and hoisting it above the include-flattened body would
+        // read its inputs before they are assigned — OpenSCAD evaluates top-level assignments in
+        // document order, so the read would yield undef. It stays at its document position instead
+        // (it does not end the run: OpenSCAD keeps collecting literals past it).
         private static List<AssignmentStatement> ExtractPrologue(LoadedFile root, HashSet<AstNode> nodes)
         {
             var prologue = new List<AssignmentStatement>();
@@ -133,8 +143,12 @@ public static class Inliner
             {
                 if (statement is AssignmentStatement assignment)
                 {
-                    prologue.Add(assignment);
-                    nodes.Add(assignment);
+                    if (IsCustomizerLiteral(assignment.Value))
+                    {
+                        prologue.Add(assignment);
+                        nodes.Add(assignment);
+                    }
+
                     continue;
                 }
 
@@ -148,6 +162,21 @@ public static class Inliner
 
             return prologue;
         }
+
+        // Mirrors OpenSCAD Expression::isLiteral() (Expression.cc), the Customizer's parameter gate:
+        // literals, unary ops over literals, and all-literal vectors/ranges qualify; identifier reads,
+        // calls, and arithmetic do not. Parentheses are transparent (OpenSCAD's AST never keeps them).
+        private static bool IsCustomizerLiteral(Expression expression) => expression switch
+        {
+            NumberLiteral or StringLiteral or BooleanLiteral or UndefLiteral => true,
+            UnaryExpression unary => IsCustomizerLiteral(unary.Operand),
+            ParenthesizedExpression parenthesized => IsCustomizerLiteral(parenthesized.Inner),
+            VectorExpression vector => vector.Elements.All(IsCustomizerLiteral),
+            RangeExpression range => IsCustomizerLiteral(range.Start)
+                && (range.Step is null || IsCustomizerLiteral(range.Step))
+                && IsCustomizerLiteral(range.End),
+            _ => false,
+        };
 
         // ---------------------------------------------------------------------------------------------
         // Phase A — include flattening + use discovery

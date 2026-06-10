@@ -129,6 +129,12 @@ A list-comprehension generator (`for` / `if` / `let` / `each` in their comprehen
 - **Message**: `Aggregated {n} file header(s) into the bundle header.`
 - **Notes**: a root-only header hoist does not fire this (it is positionally a no-op). `--no-bundle-licenses` disables the whole pass; `--minify`/`--no-preserve-comments` drop the block and banners like any comment. Group markers always stay with the parameter they precede, so the Customizer UI is unaffected.
 
+### SB5008 — Forward reference in the assembled bundle *(Warning, Inliner)*
+- **Trigger**: a **top-level assignment** in the final bundle reads a variable whose **first** top-level assignment comes later in the bundle. OpenSCAD evaluates top-level assignments in document order (geometry instantiates afterwards; module/function bodies resolve at call time), so such a read yields `undef` ("WARNING: Ignoring unknown variable …").
+- **Action**: none — the bundle is still emitted. This is a post-assembly safety net over the hoist/splice phases: the inliner must never *introduce* such an ordering (e.g. the Customizer-prologue hoist only moves literal assignments, which read nothing). When it fires, either the original sources already contained the forward read (OpenSCAD warns identically on the unbundled project) or an inliner transformation has a bug.
+- **Message**: `Top-level assignment '{name}' reads '{var}' before it is assigned in the bundle; OpenSCAD evaluates the read as undef.`
+- **Notes**: only **eager** expression positions are checked. Function-literal bodies and parameter defaults are lazy (call-time); call *callees* are function references, which are scope-wide and may legally point forward; `$`-special variables and built-in constants (`PI`) never warn. Bound names (`let`/`for`/comprehension bindings) shadow later top-level assignments and never warn.
+
 ### SB6001 — Emitter self-check failure *(Error, Emitter — internal)*
 - **Trigger**: emitted output fails to re-parse to an equivalent AST (an internal emitter bug; should never occur in production).
 - **Message**: `Internal: emitted output failed to re-parse.`

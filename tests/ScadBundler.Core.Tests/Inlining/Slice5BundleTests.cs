@@ -409,6 +409,92 @@ public sealed class Slice5BundleTests
     }
 
     [Fact]
+    public void ComputedRootAssignment_IsNotHoisted_StaysAfterItsInputs()
+    {
+        // Regression (ForkedHolder): `spacing = lib_unit;` is not a Customizer parameter — OpenSCAD
+        // only collects literal assignments (Expression::isLiteral) — and hoisting it above the
+        // included library that assigns `lib_unit` made OpenSCAD read it as undef (top-level
+        // assignments evaluate in document order). It must stay at its document position.
+        var (bundled, diagnostics) = BundleHelper.Bundle(
+            null,
+            ("main.scad", "include <lib.scad>\nwidth = 10;\nspacing = lib_unit * 2;\npart();"),
+            ("lib.scad", "lib_unit = 42;\nmodule part() cube(lib_unit);"));
+
+        List<string> names = [.. BundleHelper.TopLevelDeclarationNames(bundled)];
+        Assert.True(names.IndexOf("width") < names.IndexOf("lib_unit"));   // literal: hoisted
+        Assert.True(names.IndexOf("spacing") > names.IndexOf("lib_unit")); // computed: document order
+        Assert.DoesNotContain(diagnostics, d => d.Code == DiagnosticCode.ForwardReference);
+    }
+
+    [Fact]
+    public void Prologue_HoistsExactlyOpenScadLiteralForms()
+    {
+        // Mirrors OpenSCAD Expression::isLiteral(), the Customizer's parameter gate: negatives,
+        // strings, booleans, all-literal vectors and ranges qualify; identifier reads, arithmetic,
+        // calls, and vectors with computed elements do not.
+        var (bundled, _) = BundleHelper.Bundle(
+            null,
+            ("main.scad",
+                "include <lib.scad>\n"
+                + "a = -5;\nb = [1, 2];\nc = [0 : 0.5 : 10];\nd = \"text\";\ne = true;\n"
+                + "f = LIB + 1;\ng = max(1, 2);\nh = [LIB, 1];\n"
+                + "part();"),
+            ("lib.scad", "LIB = 1;\nmodule part() cube(1);"));
+
+        List<string> names = [.. BundleHelper.TopLevelDeclarationNames(bundled)];
+        int lib = names.IndexOf("LIB");
+        foreach (string hoisted in (string[])["a", "b", "c", "d", "e"])
+        {
+            Assert.True(names.IndexOf(hoisted) < lib, $"'{hoisted}' should be hoisted above the library");
+        }
+
+        foreach (string computed in (string[])["f", "g", "h"])
+        {
+            Assert.True(names.IndexOf(computed) > lib, $"'{computed}' should stay in document order");
+        }
+    }
+
+    [Fact]
+    public void ForwardReference_InAssembledBundle_WarnsSB5008()
+    {
+        // The library reads `size`, which the root assigns with a computed (non-hoistable)
+        // expression — so the bundle reads it before its assignment. OpenSCAD warns the same way
+        // on the original include order; the bundle is faithful but flagged.
+        var (_, diagnostics) = BundleHelper.Bundle(
+            null,
+            ("main.scad", "include <lib.scad>\nsize = base();\nfunction base() = 4;\npart();"),
+            ("lib.scad", "r = size * 2;\nmodule part() cube(r);"));
+
+        Diagnostic warning = Assert.Single(diagnostics, d => d.Code == DiagnosticCode.ForwardReference);
+        Assert.Equal(DiagnosticSeverity.Warning, warning.Severity);
+        Assert.Contains("'size'", warning.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ForwardFunctionCall_DoesNotWarnSB5008()
+    {
+        // Definitions are scope-wide in OpenSCAD: an assignment may call a function defined later
+        // in the file. Only variable reads are order-sensitive.
+        var (_, diagnostics) = BundleHelper.Bundle(
+            null,
+            ("main.scad", "a = 1;\nb = later(a);\nfunction later(x) = x + 1;\ncube(b);"));
+
+        Assert.DoesNotContain(diagnostics, d => d.Code == DiagnosticCode.ForwardReference);
+    }
+
+    [Fact]
+    public void LetBoundName_ShadowingLaterAssignment_DoesNotWarnSB5008()
+    {
+        // `k` inside the let body is the binding, not the later-assigned top-level `k`; `$fn` and
+        // `PI` resolve to the special-variable/built-in scope. None is a forward read.
+        var (_, diagnostics) = BundleHelper.Bundle(
+            null,
+            ("main.scad", "a = let (k = 2) k + PI + $fn;\nk = base();\nfunction base() = 7;\ncube(a);"));
+
+        Assert.DoesNotContain(diagnostics, d => d.Code == DiagnosticCode.ForwardReference);
+    }
+
+    [Fact]
     public void UsedLibrary_InternalReference_FollowsRenamedPrivateConstant()
     {
         // Root and the used library both define WALL; the library's private constant is namespaced and

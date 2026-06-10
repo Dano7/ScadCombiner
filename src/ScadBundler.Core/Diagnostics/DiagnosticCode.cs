@@ -116,6 +116,13 @@ public static class DiagnosticCode
     /// </summary>
     public const string LicensesAggregated = "SB5007";
 
+    /// <summary>
+    /// A top-level assignment in the bundle reads a variable whose first top-level assignment comes
+    /// later in the bundle. OpenSCAD evaluates top-level assignments in document order, so the read
+    /// yields <c>undef</c> — a post-assembly safety net against ordering bugs in the inliner.
+    /// </summary>
+    public const string ForwardReference = "SB5008";
+
     // Emitting (SB6xxx)
 
     /// <summary>
