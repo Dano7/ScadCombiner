@@ -23,7 +23,17 @@ public abstract record Trivia
 /// </summary>
 /// <param name="Text">The raw comment text, including delimiters.</param>
 /// <param name="Kind">Whether the comment is a line or block comment.</param>
-public sealed record CommentTrivia(string Text, CommentKind Kind) : Trivia;
+public sealed record CommentTrivia(string Text, CommentKind Kind) : Trivia
+{
+    /// <summary>
+    /// When <c>true</c>, this comment survives the comment-stripping emit modes
+    /// (<c>--minify</c> / <c>--no-preserve-comments</c>) instead of being dropped. Set on the
+    /// aggregated license header and the synthesized Customizer <c>/* [Hidden] */</c> fence so a
+    /// hardened (minified/obfuscated) bundle keeps its legal header and its Customizer parameter
+    /// boundary. Ignored when comments are preserved (every comment is emitted then). Default <c>false</c>.
+    /// </summary>
+    public bool Sticky { get; init; }
+}
 
 /// <summary>The lexical form of a comment.</summary>
 public enum CommentKind

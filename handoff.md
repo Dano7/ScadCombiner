@@ -6,22 +6,72 @@ You are picking up **ScadBundler**, an AST-based OpenSCAD file bundler (C# / .NE
 
 ## ▶ Next session — start here
 
-The **OpenSCAD integration harness is done and green** (this session — see below), as are the attribution
-work, the Customizer computed-params fix, and the last-wins position fix. Remaining post-v1 work, pick one:
+**Slice 7 (minifier & obfuscator) is done and green** (this session — see below). The OpenSCAD
+integration harness, the attribution work, the Customizer computed-params fix, and the last-wins position
+fix are all done too. Remaining post-v1 work, pick one:
 
-1. **Obfuscator (`--obfuscate`)** — [Post-Demo-Plan.md](docs/Post-Demo-Plan.md) Item D (**vNext**). A
-   thin layer over the always-namespace work: same candidate set + reference rewrite + prologue exemption,
-   only the name *generator* changes. Must use **deterministic** ids (a counter), never memory addresses
-   (those break goldens/idempotence). Design note: an obfuscated bundle should keep the **license block**
-   (legal text must survive) even if the per-section banners are dropped.
-2. Broader post-v1: WASM/JSON API + "ScadBundler Live", real-world golden masters (BOSL2/NopSCADlib/
+1. Broader post-v1: WASM/JSON API + "ScadBundler Live", real-world golden masters (BOSL2/NopSCADlib/
    dotSCAD), emitter line-length wrapping. See §"Post-v1 work". The real-world golden masters now also
    exercise the attribution pass against genuine library license headers (BOSL2 is BSD-2-Clause,
-   NopSCADlib GPL-3.0) — and can ride the new differential harness for render equivalence.
-3. **Small focused follow-up:** [ForwardReferenceChecker.cs](src/ScadBundler.Core/Inlining/ForwardReferenceChecker.cs)
+   NopSCADlib GPL-3.0) — and can ride the differential harness for render equivalence (incl. the new
+   `--minify`/`--obfuscate` profiles).
+2. **Small focused follow-up:** [ForwardReferenceChecker.cs](src/ScadBundler.Core/Inlining/ForwardReferenceChecker.cs)
    line coverage is ≈60% (see watch items) — bring it to the ≥95% bar.
+3. **Deferred Slice-7 extensions** ([Slice-7 §12](docs/slices/Slice-7-Minify-Obfuscate.md)): conservative
+   constant folding + control-flow rewriting (loop unroll, `if`↔`?:`) — each gated by a per-shape
+   differential fixture before shipping (SB5010 surfaces a guarded skip); plus the obfuscation knobs
+   (`--obfuscate-strength`/`-style`, a `--stable-names` escape hatch).
 
-### Done this session (2026-06-10, session 3) — OpenSCAD integration harness; it caught a PrivateConstants bug
+### Done this session (2026-06-11) — Slice 7: minifier & obfuscator (`Transforming/`)
+
+**The minifier and obfuscator are implemented, tested, and differentially verified.** A new
+**`Transforming/`** stage runs after the Inliner, before the Emitter (`Inliner → Transformer → Emitter`),
+wired through `BundleOptions.Hardening` in `Bundler.Bundle`. Two **mutually-exclusive profiles** share one
+engine: `--minify` (size) and `--obfuscate` (reverse-engineering cost), CLI exit 2 if both given.
+
+- **The correctness bar is Tier-1 (byte-identical CSG), not "same solid."** OpenSCAD source is a program
+  that *evaluates* to a CSG tree; the harness compares the `.csg` bytes, which is stricter than solid
+  equivalence (reordering a `union`, `cube`→`polyhedron` all fail it). So every transform stays in the
+  **value / CSG-tree-preserving** domain — no geometry kernel, no solid-equivalence guessing. Proven
+  green against the official binary by **`tests/Corpus/integration/T-001-harden`** (minify + obfuscate
+  both byte-identical CSG, identical `ECHO:`, no new warnings).
+- **Transforms** (`src/ScadBundler.Core/Transforming/`): `IdentifierRenaming` (top-level decls + refs via
+  a re-run post-inline `ISemanticModel`), `ParameterAliasing` (the headline — a Customizer param keeps its
+  name **once** at the top, then `<alias> = <param>;` after the fence and every body read rewritten to the
+  alias), `DeadCodeElimination` (mark-and-sweep tree-shaking from roots = executed statements + prologue +
+  echo/assert-bearing assignments), `LiteralCanonicalization` (minify; shortest re-lexed-bit-identical
+  number spelling), and obfuscate-only `StringDecomposition` (`"ab"`→`str(chr(97),chr(98))`),
+  `IndirectionInjection` (reference-transparent `let(b=e) b` wraps), `DeadCodeInjection` (uncalled decoy
+  modules + a `*`-disabled call). Engine: `Transformer`, `IBundleTransform`, `TransformContext`,
+  `NameGenerator`, `NameRewriter`, `TreeRewriter`, `AstNodes`, `Prologue`, `EmptyModel`.
+- **Determinism + avalanche, always on** (`NameGenerator`): every name is a pure function of a global seed
+  = `FNV1a64` of the canonical post-inline bundle. Same input → byte-identical output; a one-char change
+  reshuffles **every** name (splitmix64 mix). Minify uses the shortest names assigned in a *seed-permuted*
+  order (size stays minimal, mapping avalanches); obfuscate uses opaque `_<base32>` tokens. **Never**
+  memory addresses (would break goldens/idempotence — the Post-Demo Item-D "design correction").
+- **License preservation** via a new **`CommentTrivia.Sticky`** flag: the aggregated license header and the
+  synthesized `/* [Hidden] */` Customizer fence are marked sticky, so the emitter keeps them even under
+  comment-stripping (`--minify`/`--no-preserve-comments`). `--strip-license` (→ `BundleOptions.StripLicense`)
+  marks the license non-sticky so it drops. **Emitter change:** `--minify` now keeps **one top-level
+  statement per line** so OpenSCAD's line-based Customizer extraction (`getLineToStop`) still finds the
+  hoisted prologue params above the first `{`.
+- **Diagnostics:** **SB5009** (Info, hardening summary), **SB5010** (Info, reserved — a guarded transform
+  skip) — cataloged in [Diagnostics.md](docs/Diagnostics.md) first.
+- **Two gotchas fixed during bring-up** (both were prologue-literality violations under obfuscate): string
+  decomposition must **protect Customizer parameter values** (a decomposed string is not a literal, so the
+  Customizer stops recognizing the param), and indirection must **not wrap a bare identifier** — a callee
+  identifier (`f(x)`) names a function/module, and binding a built-in/user `function` to a `let` var is not
+  a portable value in OpenSCAD. Both verified by re-running the differential.
+- **Tests:** `tests/ScadBundler.Core.Tests/Transforming/` (`NameGeneratorTests`, `TransformTests`,
+  `TransformInternalsTests` — 37 tests incl. determinism, avalanche, Customizer aliasing, tree-shaking,
+  semantic-no-op, per-transform); 3 new CLI tests (`--obfuscate`, `--strip-license`, mutual exclusion);
+  the `HardeningDifferentialTests` integration pair. **682 tests** (Core 625, CLI 23, Integration 34),
+  zero warnings, `Transforming/`≈98% line coverage. Spec finalized in
+  [Slice-7-Minify-Obfuscate.md](docs/slices/Slice-7-Minify-Obfuscate.md) (the three open questions
+  resolved with the user: keep-license-by-default + `--strip-license`; single plain `--obfuscate`;
+  avalanche-always, no escape hatch).
+
+### Done earlier (2026-06-10, session 3) — OpenSCAD integration harness; it caught a PrivateConstants bug
 
 **1. The integration harness (V1–V3) exists and runs on every `dotnet test`** when OpenSCAD is present:
 new **`tests/ScadBundler.IntegrationTests`** project (5th in the sln) wrapping the proven differential
@@ -175,23 +225,28 @@ truth verified at `C:\git\hub\openscad`.
 
 ## Current state
 
-- **Slices 1–6 done** + **post-demo Items A/B/C** + **post-v1 #1–#4** (the attribution pass — license
+- **Slices 1–7 done** + **post-demo Items A/B/C** + **post-v1 #1–#4** (the attribution pass — license
   aggregation + provenance banners) + the Customizer computed-params regression fix (SB5008) + the
   last-wins winner-position fix + **the OpenSCAD integration harness** + the PrivateConstants
-  include-closure fix:
-  `dotnet build` zero-warning (warnings-as-errors), `dotnet test` green (**621 tests**: 569 in
-  `ScadBundler.Core.Tests`, 20 in `ScadBundler.Cli.Tests`, 32 in `ScadBundler.IntegrationTests`).
-  Coverage: `Lexing/`≈98%, `Parsing/`≈99%, `Semantics/` 100% (incl. the new closure code), `Loading/`≈98.8%,
+  include-closure fix + **Slice 7 (minifier & obfuscator)**:
+  `dotnet build` zero-warning (warnings-as-errors), `dotnet test` green (**682 tests**: 625 in
+  `ScadBundler.Core.Tests`, 23 in `ScadBundler.Cli.Tests`, 34 in `ScadBundler.IntegrationTests`).
+  Coverage: `Lexing/`≈98%, `Parsing/`≈99%, `Semantics/` 100%, `Loading/`≈98.8%,
   `Inlining/`: `Attribution`/`StructuralKey`/`Bundler` 100%, `BundleRewriter`≈99.6%, `Inliner.cs`≈98%,
   **`ForwardReferenceChecker.cs`≈60% (known gap — see watch items)**, `Emitting/`: `Emitter.cs`≈97%,
-  `EmitOptions.cs` 100%.
+  `EmitOptions.cs` 100%, **`Transforming/`≈98%** (LiteralCanonicalization's `ReLexesTo` defensive
+  reject branches + the unreachable `SymbolFor` throw are the only sub-95% lines).
 - **Post-demo (this session), see [docs/Post-Demo-Plan.md](docs/Post-Demo-Plan.md):**
   - **A — Customizer parameters preserved.** The root file's leading **literal** parameter assignments are hoisted to the top of the bundle (verbatim, never renamed) and a synthesized `/* [Hidden] */` fences the rest, so OpenSCAD's Customizer shows the model's real knobs instead of an included library's globals. Computed assignments are not parameters (OpenSCAD `Expression::isLiteral` gate) and keep their document position — see "Done earlier (2026-06-10, session 1)". Verified on `C:\git\dan\SCAD\ForkedHolder.scad`. ([Inliner.cs](src/ScadBundler.Core/Inlining/Inliner.cs); goldens `slice5-bundle/B-008`, `B-009`.)
   - **B — OpenSCAD-faithful search paths.** New [OpenScadEnvironment.cs](src/ScadBundler.Core/Loading/OpenScadEnvironment.cs) reconstructs OpenSCAD's `parser_init` order: absolutized `OPENSCADPATH` (empty→CWD) + the per-user library folder. Wired through `Bundler`/`BundleCommand`.
-  - **C (`--qualify-all`)** and **D (obfuscator, vNext)** remain scoped but unimplemented.
+  - **C (`--qualify-all`)** remains scoped but unimplemented; **D (obfuscator)** is **done** as Slice 7
+    (`--obfuscate`; see "Done this session (2026-06-11)" — its deterministic-id design correction is honored).
 - Branch is **`Claude_implementation`**. Last feature commits (2026-06-10, session 3): `fix(semantics): collect use'd private constants over the include closure` + `feat(tests): add OpenSCAD differential integration harness (V1–V3)`.
 - **Projects:** `src/ScadBundler.Core` (the library), **`src/ScadBundler`** (the CLI, `PackAsTool` → `scadbundler`), `tests/ScadBundler.Core.Tests`, **`tests/ScadBundler.Cli.Tests`**, **`tests/ScadBundler.IntegrationTests`** (env-gated differential harness). All five are in `ScadBundler.sln`.
-- **Entry points:** `Bundler.Bundle(rootPath, options)` (disk + `OPENSCADPATH`) → `BundleResult`; `Emitter.Emit(scadFile, EmitOptions?)` → `string`. The CLI wires them in `src/ScadBundler/BundleCommand.cs`.
+- **Entry points:** `Bundler.Bundle(rootPath, options)` (disk + `OPENSCADPATH`) → `BundleResult` (runs the
+  Slice-7 `Transformer` internally when `options.Hardening` ≠ `None`); `Emitter.Emit(scadFile, EmitOptions?)`
+  → `string`. The CLI wires them in `src/ScadBundler/BundleCommand.cs` (`--minify`/`--obfuscate` set both
+  `BundleOptions.Hardening` and the matching `EmitOptions`).
 
 ## What Slice 6 added
 

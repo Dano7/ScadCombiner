@@ -86,3 +86,9 @@ now fixed (see [slices/Slice-4-Semantic.md](slices/Slice-4-Semantic.md) §7 amen
 Full spec: **[slices/Slice-6-Emitter-CLI.md](slices/Slice-6-Emitter-CLI.md)** — the capstone (completes the pipeline end-to-end).
 
 **Scope**: deterministic pretty-printer (configurable indent/brace style; default style locks the `B-*` goldens; precedence-aware parens; trivia/Customizer/license preservation; `--minify`) + the `scadbundler bundle` CLI ([UX.md](UX.md) options, pipeline wiring, diagnostics, exit codes, `dotnet tool` packaging). **Exit**: EM-001/EM-002 + exact B-* goldens pass; CLI end-to-end + exit codes; ≥95% emitter coverage.
+
+## Slice 7: Minifier & Obfuscator ✅ **Done** (post-v1, 2026-06-11)
+
+Full spec: **[slices/Slice-7-Minify-Obfuscate.md](slices/Slice-7-Minify-Obfuscate.md)**.
+
+**Scope**: a post-inline hardening stage (`Transforming/`, between Inliner and Emitter) with two mutually-exclusive profiles over one engine — `--minify` (size) and `--obfuscate` (reverse-engineering cost). Tier-1 (CSG-tree-preserving) transforms only: identifier renaming (deterministic, avalanche-seeded), Customizer-parameter aliasing, dead-code elimination (tree-shaking), literal canonicalization, plus obfuscate-only string decomposition, indirection injection, and render-inert dead-code injection. License header kept by default (`--strip-license` opts out); SB5009/SB5010. **Done**: 682 tests green (Core 625, CLI 23, Integration 34), zero warnings, `Transforming/` ≈98% line coverage; the **T-001-harden** differential fixture proves byte-identical CSG, identical `ECHO:`, and no new warnings for both profiles against the official binary.

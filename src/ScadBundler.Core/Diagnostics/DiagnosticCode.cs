@@ -123,6 +123,20 @@ public static class DiagnosticCode
     /// </summary>
     public const string ForwardReference = "SB5008";
 
+    /// <summary>
+    /// Summary of a hardening profile run (<c>--minify</c>/<c>--obfuscate</c>): how many identifiers
+    /// were renamed, definitions tree-shaken, and Customizer parameters aliased. Info-severity;
+    /// emitted once per bundle when a profile ran.
+    /// </summary>
+    public const string Hardened = "SB5009";
+
+    /// <summary>
+    /// A hardening transform was skipped on a node by a safety guard (a construct it cannot prove
+    /// CSG-equivalent — e.g. a string in a path/font position, or an expression carrying a side
+    /// effect). Info-severity; the node is left unchanged.
+    /// </summary>
+    public const string TransformSkipped = "SB5010";
+
     // Emitting (SB6xxx)
 
     /// <summary>

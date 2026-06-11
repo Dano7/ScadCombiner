@@ -13,7 +13,9 @@ scadbundler bundle <input.scad> [options]
 - `--on-collision <strategy>`: `auto`|`prefix`|`error`|`keep-first`|`keep-last` (default: **`auto`** = origin-dependent — `keep-last` for `include` collisions to match OpenSCAD's native last-wins, `prefix` for `use`d-library collisions to preserve library isolation; see [Spec.md](Spec.md) "Collision-strategy implication"). Any value other than `auto` forces that one strategy everywhere. See **Collision Strategies** below for what each does and when to reach for it.
 - `--preserve-comments`: Keep all comments (default: true)
 - `--[no-]bundle-licenses`: Aggregate every bundled file's leading header/license comments at the top of the output (encounter order, root first, deduplicated — moved, not copied) and insert one-line provenance banners (`// ======== include <lib.scad> ========`) between the inlined sections (default: **on**; SB5007). The downloader of a bundled model sees whose code each section is and under what terms — `--no-bundle-licenses` produces an unannotated bundle, and `--minify`/`--no-preserve-comments` drop the annotations like any comment.
-- `--minify`: Remove unnecessary whitespace/comments
+- `--minify`: **Minimize bundle size** (Slice 7). An AST-level pass — tree-shakes unreferenced definitions, shortens every identifier, canonicalizes number literals — followed by whitespace/comment stripping. Incidentally unreadable. Keeps the aggregated license header (use `--strip-license` to drop it).
+- `--obfuscate`: **Maximize the cost of reverse-engineering** the bundle (Slice 7). Opaque identifiers, reference-transparent indirection, render-inert decoys (uncalled modules + `*`-disabled calls), and decomposed strings (`"ab"`→`str(chr(97),chr(98))`). Output may be *larger* than the input. Mutually exclusive with `--minify` (giving both is a usage error, exit 2). Keeps the license header unless `--strip-license`.
+- `--strip-license`: Drop the aggregated license header under `--minify`/`--obfuscate` (for when you own all the sources). Default is to **keep** it — the downloader of a hardened model still gets the legal text.
 - `--dry-run`: Show what would be done without writing output
 - `--verbose`: Detailed logging of inlined files and transformations
 - `--diff`: Show diff between input and bundled output
@@ -43,6 +45,28 @@ OpenSCAD's native rule is **last**-wins: a later definition silently stomps an e
 - For a reassigned **variable**, `keep-first` keeps the first assignment with its *original expression*. (Contrast `auto`/`keep-last`, which reproduce OpenSCAD exactly: the parser overwrites a reassigned variable's expression in place, so the **last** expression wins and is emitted at the **first** assignment's position.)
 - Like every forced strategy it applies **everywhere**, including `use`-origin names: a colliding `use`-import is kept or dropped un-namespaced, overriding the library isolation `auto` preserves.
 - Drops are **silent** by design — no per-name SB3003/SB3004 churn, because the outcome was explicitly chosen. Bundle with the default `auto` and `--dry-run` first to see what collides and which file wins, then decide whether `keep-first` matches your intent.
+
+## Minify & Obfuscate (`--minify` / `--obfuscate`)
+
+Two output-hardening profiles share one engine and one **non-negotiable correctness bar**: the hardened
+bundle must render **byte-identical CSG** to the original (verified against the official OpenSCAD binary).
+They only ever apply *value-preserving, CSG-tree-preserving* transforms (renaming, tree-shaking, literal
+re-spelling, reference-transparent indirection, render-inert decoys, string decomposition) — never
+restructuring that merely yields the same *solid*, which the byte-identical bar cannot prove. Full
+rationale in [slices/Slice-7-Minify-Obfuscate.md](slices/Slice-7-Minify-Obfuscate.md).
+
+- **Customizer parameters keep their names — but only at the top.** OpenSCAD's Customizer still lists the
+  model's real knobs (`wall_thickness`, …) with their original names. Each parameter is then assigned to a
+  generated alias *immediately* and that alias is used everywhere after, so the meaningful name appears
+  exactly once. (`--minify` keeps each top-level statement on its own line so the line-based Customizer
+  extraction still works; comment-driven slider annotations like `// [1:20]` are dropped under hardening.)
+- **Deterministic with avalanche.** Same input → byte-identical output (good for reproducible builds and
+  goldens), yet a one-character source change reshuffles *every* generated name — so you can't diff two
+  versions to learn what changed. Always on; there is no stable-name escape hatch.
+- **License preserved by default.** The aggregated license/attribution header survives both profiles (the
+  downloader still gets the legal text); per-section provenance banners and ordinary comments are dropped.
+  `--strip-license` opts out.
+- **Mutually exclusive.** `--minify --obfuscate` together is a usage error (exit 2).
 
 ## Expected Behavior
 - Smart resolution of `include` and `use` with cycle detection.
