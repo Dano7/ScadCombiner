@@ -135,6 +135,17 @@ A list-comprehension generator (`for` / `if` / `let` / `each` in their comprehen
 - **Message**: `Top-level assignment '{name}' reads '{var}' before it is assigned in the bundle; OpenSCAD evaluates the read as undef.`
 - **Notes**: only **eager** expression positions are checked. Function-literal bodies and parameter defaults are lazy (call-time); call *callees* are function references, which are scope-wide and may legally point forward; `$`-special variables and built-in constants (`PI`) never warn. Bound names (`let`/`for`/comprehension bindings) shadow later top-level assignments and never warn.
 
+### SB5009 — Hardening profile applied *(Info, Transformer)*
+- **Trigger**: a hardening profile (`--minify` or `--obfuscate`) ran over the bundle (Slice 7). Fires once per bundle.
+- **Action**: reports the work done by the profile — how many identifiers were renamed, definitions tree-shaken (removed as unreachable), and Customizer parameters aliased. The transforms are all **Tier-1** (CSG-tree-preserving): they change how the source computes values and structures calls but produce byte-identical CSG, verified by the differential harness (`tests/Corpus/integration/T-001-harden`).
+- **Message**: `{profile}: {renamed} identifiers renamed, {removed} definitions tree-shaken, {aliased} customizer parameters aliased, {injected} nodes injected.`
+- **Notes**: the profile is deterministic with **avalanche** — a one-character source change reshuffles every generated name (seed = a hash of the post-inline bundle). `--minify` and `--obfuscate` are mutually exclusive (CLI exit 2). The aggregated license header survives both profiles unless `--strip-license` is given. See [slices/Slice-7-Minify-Obfuscate.md](slices/Slice-7-Minify-Obfuscate.md).
+
+### SB5010 — Hardening transform skipped *(Info, Transformer — reserved)*
+- **Trigger**: a hardening transform declined to act on a node behind a safety guard (a construct it cannot prove CSG-equivalent — e.g. a string in a path/font position, an expression carrying a side effect). Reserved: the v1 safe set rarely needs to surface it.
+- **Message**: `{transform} skipped on {node}: {reason}.`
+- **Notes**: reserved now for the deferred folding / control-flow transforms (Slice 7 §12), whose per-shape guards would emit it. The v1 safe set silently leaves guarded nodes unchanged.
+
 ### SB6001 — Emitter self-check failure *(Error, Emitter — internal)*
 - **Trigger**: emitted output fails to re-parse to an equivalent AST (an internal emitter bug; should never occur in production).
 - **Message**: `Internal: emitted output failed to re-parse.`

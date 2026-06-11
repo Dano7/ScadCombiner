@@ -481,6 +481,17 @@ Input = the example in [AST-Reference.md](AST-Reference.md) §14.7 (`/* [Dimensi
 **EM-002 — idempotence**
 For every `slice6-emit` and `slice5-bundle` golden, `emit(parse(expected)) == expected`. Pretty-printing must be a fixed point.
 
+### Slice 7 — Minifier & Obfuscator (`T-`)
+
+**T-001-harden — hardening render equivalence** (`integration/T-001-harden/`)
+A root with prologue params (incl. a string), an echo'd string, an included private constant, a namespaced
+`use` library, and an unused (tree-shakeable) module.
+- **Assertion**: bundling with `--minify` *and* with `--obfuscate` each renders **byte-identical CSG**,
+  emits identical `ECHO:`, and adds no new warnings against the official binary (the Tier-1 proof). Run by
+  `HardeningDifferentialTests`; self-skips without OpenSCAD.
+- Unit-level behaviors (determinism, avalanche, Customizer aliasing, tree-shaking, string decomposition,
+  indirection, decoys, semantic no-op) live in `tests/ScadBundler.Core.Tests/Transforming/`.
+
 ---
 
 ## 6. Decision-Proving Cases (cross-reference)

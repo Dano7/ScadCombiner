@@ -766,11 +766,15 @@ public static class Inliner
 
             // The aggregated header/license block leads the whole bundle (above the fence and any
             // banner): the root's own header verbatim, then each distinct non-root header, labeled.
+            // Marked sticky (unless --strip-license) so the legal text survives a hardening profile.
             if (_attribution is { HeaderBlock.Count: > 0 } && statements.Count > 0)
             {
+                bool sticky = !_options.StripLicense;
+                IEnumerable<Trivia> header = _attribution.HeaderBlock
+                    .Select(t => t is CommentTrivia comment ? comment with { Sticky = sticky } : t);
                 statements[0] = statements[0] with
                 {
-                    LeadingTrivia = [.. _attribution.HeaderBlock, .. statements[0].LeadingTrivia],
+                    LeadingTrivia = [.. header, .. statements[0].LeadingTrivia],
                 };
             }
 
@@ -788,7 +792,9 @@ public static class Inliner
         // to a comment). Dropped under `--minify`/`--no-preserve-comments`, like all comments.
         private static Statement WithHiddenFence(Statement statement)
         {
-            var fence = new CommentTrivia("/* [Hidden] */", CommentKind.Block) { Span = SourceSpan.Synthetic };
+            // Sticky so the Customizer boundary survives a hardening profile (minify/obfuscate): without
+            // it, body globals before the first '{' would leak back into OpenSCAD's Customizer.
+            var fence = new CommentTrivia("/* [Hidden] */", CommentKind.Block) { Span = SourceSpan.Synthetic, Sticky = true };
             var leading = new List<Trivia>(statement.LeadingTrivia.Count + 1) { fence };
             leading.AddRange(statement.LeadingTrivia);
             return statement with { LeadingTrivia = leading, BlankLineBefore = true };

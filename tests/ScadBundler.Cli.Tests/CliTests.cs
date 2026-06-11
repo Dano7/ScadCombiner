@@ -70,8 +70,8 @@ public sealed class CliTests
         int exit = Run(project, ["bundle", project.Path("main.scad"), "-o", "-", "--minify"], out string stdout, out _);
 
         Assert.Equal(0, exit);
-        Assert.DoesNotContain("\n", stdout, StringComparison.Ordinal);
-        Assert.DoesNotContain("//", stdout, StringComparison.Ordinal);
+        Assert.Contains("()cube(1);", stdout, StringComparison.Ordinal); // inner whitespace dropped (module renamed)
+        Assert.Contains("// header", stdout, StringComparison.Ordinal);  // license header kept (sticky, Slice 7)
         ParseResult reparsed = Parser.Parse(new SourceFile("min.scad", stdout));
         Assert.DoesNotContain(reparsed.Diagnostics, d => d.Severity == Core.Diagnostics.DiagnosticSeverity.Error);
     }
@@ -79,12 +79,12 @@ public sealed class CliTests
     [Fact]
     public void NoPreserveComments_DropsComments()
     {
-        using var project = new TempProject(("main.scad", "// header\ncube(1);"));
+        using var project = new TempProject(("main.scad", "cube(1); // trailing note"));
 
         int exit = Run(project, ["bundle", project.Path("main.scad"), "-o", "-", "--no-preserve-comments"], out string stdout, out _);
 
         Assert.Equal(0, exit);
-        Assert.Equal("cube(1);\n", stdout);
+        Assert.Equal("cube(1);\n", stdout); // a non-header (trailing) comment is dropped — no sticky license involved
     }
 
     [Fact]
@@ -189,6 +189,54 @@ public sealed class CliTests
         Assert.Equal(0, exit);
         Assert.False(File.Exists(project.Path("main.bundled.scad")));
         Assert.Contains("dry-run", stdout, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Obfuscate_RenamesIdentifiers_KeepsLicense_ReportsSb5009()
+    {
+        using var project = new TempProject(
+            ("main.scad", "// (c) Author, MIT\nmodule widget(d) { cube(d); }\nwidget(5);"));
+
+        int exit = Run(project, ["bundle", project.Path("main.scad"), "-o", "-", "--obfuscate"], out string stdout, out string stderr);
+
+        Assert.Equal(0, exit);
+        Assert.Contains("// (c) Author, MIT", stdout, StringComparison.Ordinal); // license survives
+        Assert.DoesNotContain("widget", stdout, StringComparison.Ordinal);       // user name obfuscated away
+        Assert.Contains("cube(", stdout, StringComparison.Ordinal);              // built-in preserved
+        Assert.Contains("SB5009", stderr, StringComparison.Ordinal);
+        ParseResult reparsed = Parser.Parse(new SourceFile("o.scad", stdout));
+        Assert.DoesNotContain(reparsed.Diagnostics, d => d.Severity == Core.Diagnostics.DiagnosticSeverity.Error);
+    }
+
+    [Fact]
+    public void StripLicense_DropsLicenseHeaderUnderMinify()
+    {
+        using var project = new TempProject(("main.scad", "// (c) Author, MIT\ncube(1);"));
+
+        int exit = Run(
+            project,
+            ["bundle", project.Path("main.scad"), "-o", "-", "--minify", "--strip-license"],
+            out string stdout,
+            out _);
+
+        Assert.Equal(0, exit);
+        Assert.DoesNotContain("//", stdout, StringComparison.Ordinal); // header dropped on request
+        Assert.Contains("cube(1)", stdout, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void MinifyAndObfuscate_AreMutuallyExclusive_ExitsTwo()
+    {
+        using var project = new TempProject(("main.scad", "cube(1);"));
+
+        int exit = Run(
+            project,
+            ["bundle", project.Path("main.scad"), "-o", "-", "--minify", "--obfuscate"],
+            out _,
+            out string stderr);
+
+        Assert.Equal(2, exit);
+        Assert.Contains("mutually exclusive", stderr, StringComparison.Ordinal);
     }
 
     [Fact]

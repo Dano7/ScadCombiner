@@ -57,14 +57,23 @@ internal static class BundleCommand
             return 1;
         }
 
+        HardeningProfile hardening = options.Obfuscate
+            ? HardeningProfile.Obfuscate
+            : options.Minify ? HardeningProfile.Minify : HardeningProfile.None;
+
         var bundleOptions = new BundleOptions(
             [.. options.LibraryPaths, .. OpenScadEnvironment.LibraryPaths()],
             options.OnCollision,
             options.BundleLicenses,
-            options.PreserveComments);
+            options.PreserveComments,
+            hardening,
+            options.StripLicense);
+
+        // Emit: minify collapses whitespace + drops non-sticky comments; obfuscate keeps formatting but
+        // drops ordinary comments (the aggregated license + Customizer fence are sticky and survive both).
         var emitOptions = new EmitOptions(
-            Minify: options.Minify,
-            PreserveComments: options.PreserveComments && !options.Minify);
+            Minify: hardening == HardeningProfile.Minify,
+            PreserveComments: hardening == HardeningProfile.None && options.PreserveComments);
 
         BundleResult result = Bundler.Bundle(options.Input, bundleOptions, DiskFileSystem.Instance);
         PrintDiagnostics(result.Diagnostics, stderr);
@@ -131,6 +140,10 @@ internal static class BundleCommand
         public bool PreserveComments { get; set; } = true;
 
         public bool Minify { get; set; }
+
+        public bool Obfuscate { get; set; }
+
+        public bool StripLicense { get; set; }
 
         public bool DryRun { get; set; }
 
@@ -200,6 +213,12 @@ internal static class BundleCommand
                 case "--minify":
                     options.Minify = true;
                     break;
+                case "--obfuscate":
+                    options.Obfuscate = true;
+                    break;
+                case "--strip-license":
+                    options.StripLicense = true;
+                    break;
                 case "--dry-run":
                     options.DryRun = true;
                     break;
@@ -231,6 +250,12 @@ internal static class BundleCommand
         if (!haveInput)
         {
             error = "no input file specified.";
+            return false;
+        }
+
+        if (options.Minify && options.Obfuscate)
+        {
+            error = "--minify and --obfuscate are mutually exclusive.";
             return false;
         }
 
@@ -399,7 +424,12 @@ internal static class BundleCommand
           --[no-]bundle-licenses     Aggregate file headers/licenses at the top and add
                                      provenance banners between inlined sections (default on)
           --[no-]preserve-comments   Keep comments (default on)
-          --minify                   Emit shortest equivalent text (drops comments)
+          --minify                   Minimize size: tree-shake, shorten identifiers, canonicalize
+                                     literals, drop comments (keeps the license header)
+          --obfuscate                Maximize reverse-engineering cost: opaque identifiers,
+                                     indirection, decoys, decomposed strings (mutually exclusive
+                                     with --minify; keeps the license header)
+          --strip-license            Drop the aggregated license header under --minify/--obfuscate
           --dry-run                  Run the pipeline but write nothing
           --diff                     Print a unified diff of input vs bundled output
           --verbose                  List inlined files, renames, and normalizations

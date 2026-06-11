@@ -1,6 +1,7 @@
 using ScadBundler.Core.Diagnostics;
 using ScadBundler.Core.Loading;
 using ScadBundler.Core.Semantics;
+using ScadBundler.Core.Transforming;
 
 namespace ScadBundler.Core.Inlining;
 
@@ -44,16 +45,21 @@ public static class Bundler
         (Ast.ScadFile bundled, IReadOnlyList<Diagnostic> inlinerDiagnostics) =
             Inliner.Bundle(graph, semantics.Model, options);
 
+        // Post-inline hardening (Slice 7): a no-op unless options.Hardening selects minify/obfuscate.
+        var transformDiagnostics = new DiagnosticBag();
+        Ast.ScadFile output = Transformer.Run(bundled, options.Hardening, transformDiagnostics);
+
         IReadOnlyList<Diagnostic> all =
         [
             .. graph.Diagnostics
                 .Concat(semantics.Diagnostics)
                 .Concat(inlinerDiagnostics)
+                .Concat(transformDiagnostics.ToList())
                 .OrderBy(d => d.Span.File.Path, StringComparer.Ordinal)
                 .ThenBy(d => d.Span.Start.Offset)
                 .ThenBy(d => d.Code, StringComparer.Ordinal),
         ];
 
-        return new BundleResult(bundled, all);
+        return new BundleResult(output, all);
     }
 }

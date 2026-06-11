@@ -76,7 +76,14 @@ public sealed class Emitter
         {
             if (Min)
             {
+                EmitLeadingTrivia(statement, level); // sticky-only under minify: the license header + Customizer fence survive
                 EmitStatementCore(statement, level);
+                if (level == 0)
+                {
+                    // One top-level statement per line so OpenSCAD's line-based Customizer extraction
+                    // (getLineToStop) still sees the hoisted parameter prologue above the first '{'.
+                    _builder.Append('\n');
+                }
             }
             else
             {
@@ -580,19 +587,21 @@ public sealed class Emitter
 
     private void EmitLeadingTrivia(AstNode node, int level)
     {
-        if (Min || !_options.PreserveComments)
-        {
-            return;
-        }
-
+        bool stripping = Min || !_options.PreserveComments;
         foreach (Trivia trivia in node.LeadingTrivia)
         {
-            if (trivia is CommentTrivia comment)
+            if (trivia is not CommentTrivia comment || (stripping && !comment.Sticky))
+            {
+                continue; // stripping modes keep only sticky trivia (license header + Customizer fence)
+            }
+
+            if (!Min)
             {
                 WriteIndent(level);
-                _builder.Append(comment.Text);
-                NewLine();
             }
+
+            _builder.Append(comment.Text);
+            _builder.Append('\n'); // a real newline even under minify: separates the sticky header/fence and terminates a line comment
         }
     }
 

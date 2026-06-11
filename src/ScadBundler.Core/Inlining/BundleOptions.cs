@@ -30,6 +30,24 @@ public enum CollisionStrategy
 }
 
 /// <summary>
+/// A post-inline output-hardening profile (Slice 7). Two mutually exclusive profiles share one
+/// transform engine over the flattened bundle, governed by one correctness bar (byte-identical CSG).
+/// </summary>
+public enum HardeningProfile
+{
+    /// <summary>No hardening — emit the bundle as inlined.</summary>
+    None,
+
+    /// <summary>Minimize byte size: tree-shake dead definitions, shorten identifiers, canonicalize
+    /// literals. Incidentally unreadable.</summary>
+    Minify,
+
+    /// <summary>Maximize the cost of reverse-engineering: opaque identifiers, indirection, render-inert
+    /// decoys, decomposed strings. Output may be larger than the input.</summary>
+    Obfuscate,
+}
+
+/// <summary>
 /// Options controlling a bundle. <see cref="LibraryPaths"/> are the extra search-path entries
 /// (<c>-p</c> followed by <c>OPENSCADPATH</c>, then library dirs) consulted after the including file's
 /// own directory.
@@ -40,11 +58,18 @@ public enum CollisionStrategy
 /// header/license comments are aggregated and deduplicated at the top of the bundle, and one-line
 /// provenance banners separate the inlined sections (the attribution pass; SB5007).</param>
 /// <param name="PreserveComments">When <c>true</c>, comment trivia is preserved through bundling.</param>
+/// <param name="Hardening">The post-inline hardening profile (Slice 7); <see cref="HardeningProfile.None"/>
+/// emits the bundle unchanged.</param>
+/// <param name="StripLicense">When <c>true</c>, the aggregated license header is <b>not</b> kept through a
+/// hardening profile (it is emitted in normal mode but dropped under <c>--minify</c>/<c>--obfuscate</c>
+/// like any other comment). Default <c>false</c> — legal text survives a hardened bundle.</param>
 public sealed record BundleOptions(
     IReadOnlyList<string> LibraryPaths,
     CollisionStrategy OnCollision = CollisionStrategy.Auto,
     bool BundleLicenses = true,
-    bool PreserveComments = true)
+    bool PreserveComments = true,
+    HardeningProfile Hardening = HardeningProfile.None,
+    bool StripLicense = false)
 {
     /// <summary>Default options: no extra library paths, <see cref="CollisionStrategy.Auto"/>.</summary>
     public static BundleOptions Default { get; } = new([]);

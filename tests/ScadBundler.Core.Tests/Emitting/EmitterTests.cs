@@ -138,8 +138,9 @@ public sealed class EmitterTests
         string emitted = Emitter.Emit(ParseHelper.Parse(source).Root, new EmitOptions(Minify: true));
 
         Assert.DoesNotContain("//", emitted, StringComparison.Ordinal);
-        Assert.DoesNotContain("\n", emitted, StringComparison.Ordinal);
-        Assert.Equal("module ring(d)circle(d);x=1+2;", emitted);
+        // Comments and inner whitespace are dropped, but each top-level statement keeps its own line so
+        // OpenSCAD's line-based Customizer extraction still works (Slice 7).
+        Assert.Equal("module ring(d)circle(d);\nx=1+2;\n", emitted);
     }
 
     [Fact]
@@ -147,7 +148,7 @@ public sealed class EmitterTests
     {
         // `module` and the name must stay separated; `let`/keyword forms keep their needed spaces.
         string emitted = Emitter.Emit(ParseHelper.Parse("a = b ? c : d;").Root, new EmitOptions(Minify: true));
-        Assert.Equal("a=b?c:d;", emitted);
+        Assert.Equal("a=b?c:d;\n", emitted);
     }
 
     [Fact]
