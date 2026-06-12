@@ -27,11 +27,17 @@ explanations (W2); the options panel, a11y/responsive polish, deploy pipeline (W
   `ScadBundler.Core`. `Program.cs` registers `WorkspaceController` (scoped). Added to `ScadBundler.sln`.
 - **`wwwroot/index.html`** — renders the branded shell + blurb *immediately*; Blazor's default loading
   splash replaced; `interop.js` linked.
-- **Components** (Design §3.1): `Landing`, `EngineStatus`, `DropZone`, `FileList` (read-only statuses for
-  now), `OutputPanel`. `WorkspaceController` (Design §3.2) holds state and calls `ProjectAnalyzer` +
-  `WebBundler`.
-- **`wwwroot/interop.js`** — file drop (read `DataTransfer.files` → name+text), clipboard copy, blob
-  download (Design §4).
+- **Components** (Design §3.1): `Landing`, `EngineStatus`, `DropZone` (accepts **folder / files / `.zip`**),
+  `FileList` (read-only statuses for now), `OutputPanel`. `WorkspaceController` (Design §3.2) holds state
+  and calls `ProjectAnalyzer` + `WebBundler`.
+- **Ingestion** (Design §4): the drop zone accepts all three structure-preserving modes from the start —
+  loose files (`InputFile` + `DataTransfer.files`), a folder (`<input webkitdirectory>` button + the
+  drag-drop entries API), and a `.zip` (unzipped in managed code via BCL `System.IO.Compression.ZipArchive`
+  — **no JS lib**). Each produces `UploadedFile`s whose `Name` carries the relative path. This is what
+  makes references resolve unambiguously (Spec §3.2).
+- **`wwwroot/interop.js`** — file + folder drop (`DataTransfer.files`; folders via
+  `webkitGetAsEntry()` → recursive `readEntries()` for relative paths), clipboard copy, blob download
+  (Design §4).
 - **`tests/ScadBundler.Web.Tests`** — bUnit smoke tests (see §5).
 
 ---
@@ -40,7 +46,8 @@ explanations (W2); the options panel, a11y/responsive polish, deploy pipeline (W
 
 1. Page paints instantly (shell + blurb); `EngineStatus` shows "loading…" until the runtime is ready,
    then "ready" and the drop zone activates.
-2. The user drops / chooses one or more `.scad` files. `DropZone` reads each to text and calls
+2. The user drops / chooses a **folder, loose files, or a `.zip`**. `DropZone` reads each to text (folder
+   and zip entries keep their relative path in `UploadedFile.Name`) and calls
    `WorkspaceController.AddOrReplace`.
 3. The controller calls `ProjectAnalyzer.Analyze(uploads)`; `FileList` shows the inferred entry point
    (★ badge) and each file with a ✓/⚠/ⓕ status icon (statuses are display-only in W1).
@@ -57,11 +64,13 @@ If the set is **incomplete** in W1, show a simple "still need N file(s)" message
 
 ## 4. Scope (In / Out)
 
-**In:** the project scaffold + solution wiring; the shell/blurb; the single drop zone (files, not yet
-folders — folder drop can land in W2 with `webkitGetAsEntry`, but wiring the JS handler now is fine);
-read-only file list with statuses; live happy-path bundle; copy + download; the JS interop file.
+**In:** the project scaffold + solution wiring; the shell/blurb; the single drop zone with **all three
+ingestion modes** (folder, files, `.zip`) — these are foundational (they determine whether structure is
+present), so they ship in W1; read-only file list with statuses; live happy-path bundle; copy + download;
+the JS interop file.
 
-**Out:** missing-file drop targets, main-file editing/promotion, problems panel, options, deploy, preview.
+**Out:** the read-only structure tree + the basename-conflict picker (W2); missing-file drop targets,
+main-file editing/promotion, problems panel (W2); options, deploy, preview.
 
 ---
 
@@ -70,9 +79,12 @@ read-only file list with statuses; live happy-path bundle; copy + download; the 
 - **bUnit**: `FileList` renders the entry-point badge + correct status icons for a given `ProjectAnalysis`;
   `OutputPanel` enables Copy/Download iff `WebBundleResult.Ok && Text.Length > 0`; the controller produces
   a non-empty bundle for a complete in-memory set.
-- **Manual acceptance**: `dotnet run --project web/ScadBundler.Web`; drop a real project
-  (`C:\git\dan\SCAD\ForkedHolder.scad` + its libs); confirm the bundle downloads and **opens in OpenSCAD
-  identically** to the CLI's `ForkedHolder.bundled.scad`.
+- **Manual acceptance**: `dotnet run --project web/ScadBundler.Web`; verify all three ingestion modes —
+  drop a **folder**, drop **loose files**, and drop a **`.zip`** of a real project
+  (`C:\git\dan\SCAD\ForkedHolder.scad` + its libs); confirm each bundles and the download **opens in
+  OpenSCAD identically** to the CLI's `ForkedHolder.bundled.scad`.
+- **Ingestion unit test**: a `.zip` byte array → `UploadedFile`s with correct relative `Name`s (the zip
+  reader is plain BCL, so this is testable without a browser).
 - **Parity check**: the in-browser bundle text equals the CLI output for the same inputs (inherited from
   W0, re-confirmed manually here).
 
@@ -82,6 +94,8 @@ read-only file list with statuses; live happy-path bundle; copy + download; the 
 
 - [ ] `dotnet build` zero-warning; the app runs via `dotnet run` and paints the shell before the runtime
       finishes loading.
+- [ ] All three ingestion modes work — **folder**, **loose files**, and **`.zip`** — with folder/zip
+      preserving relative paths.
 - [ ] Dropping a complete multi-file project produces a bundle; **Copy** and **Download** work.
 - [ ] The downloaded bundle is byte-identical to the CLI's output for the same inputs.
 - [ ] bUnit smoke tests pass (file-list rendering, output gating).

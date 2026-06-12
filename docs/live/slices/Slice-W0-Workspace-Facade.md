@@ -31,8 +31,8 @@ src/ScadBundler.Core/Workspace/
   UploadedFile.cs            record (Name, Text)
   InMemoryFileSystem.cs      IFileSystem over a virtual '/'-rooted tree
   ReferenceOrigin.cs         enum { Root, Include, Use, Font }
-  DependencyModels.cs        DependencyNode, DependencyTree, MissingReference
-  ProjectAnalysis.cs         record (EntryPointCandidates, InferredRoot, Root, Tree, Missing, Diagnostics)
+  DependencyModels.cs        DependencyNode, DependencyTree, MissingReference, AmbiguousReference
+  ProjectAnalysis.cs         record (EntryPointCandidates, InferredRoot, Root, Tree, Missing, Ambiguous, Diagnostics)
   ProjectAnalyzer.cs         static Analyze(uploads, explicitRoot?) → (InMemoryFileSystem, ProjectAnalysis)
   WebBundleOptions.cs        record (BundleLicenses, Hardening, StripLicense, OnCollision, PreserveComments)
   WebBundler.cs              static Bundle(fs, root, options) → WebBundleResult
@@ -78,9 +78,11 @@ public static WebBundleResult WebBundler.Bundle(
 
 ### 3.2 `ProjectAnalyzer.Analyze`
 
-1. **Build the virtual layout** (Spec §6.3): relative-path uploads placed verbatim under `/proj/`; flat
-   uploads placed at `/proj/<name>` then satisfied per-reference by basename to a fixpoint; ambiguities
-   left unresolved + flagged. Produce the `InMemoryFileSystem`.
+1. **Build the virtual layout** (Spec §6.3): relative-path uploads (folder/zip) placed verbatim under
+   `/proj/` — exact, no ambiguity; flat uploads placed at `/proj/<name>` then satisfied per-reference by
+   basename to a fixpoint. A reference matched by **>1** uploaded basename (or one needed at two
+   sub-paths) is left unresolved and emitted as an `AmbiguousReference` carrying its `Candidates`. Produce
+   the `InMemoryFileSystem`.
 2. **Infer or accept the root** (Spec §6.1): parse each file, build the reference graph, pick in-degree-0
    candidates ordered geometry-first; `InferredRoot` when unambiguous; `explicitRoot` overrides.
 3. **Dependency report** (Spec §6.2): `SourceLoader.Load(root, BundleOptions.Default-shaped, fs)` →
@@ -129,8 +131,10 @@ Drive everything from in-memory `UploadedFile[]` — no disk.
   unresolved `use <missing.scad>` → one `MissingReference` with the right `NeededBy`; a `.ttf` `use` →
   `Origin = Font, Resolved = true`, **not** in `Missing`; SB4001 is **absent** from `Diagnostics`.
 - **Layout inference**: flat drop of `main.scad`(`include <sub/lib.scad>`) + `lib.scad` resolves and
-  bundles; folder drop with real relative paths resolves verbatim; basename ambiguity (two `lib.scad`s) →
-  flagged, not silently mis-bound.
+  bundles; folder/zip-style uploads with real relative paths resolve verbatim and produce **no**
+  `Ambiguous`; basename ambiguity (two different-content `lib.scad`s a reference needs) → one
+  `AmbiguousReference` listing **both** candidates, not silently mis-bound; re-adding one candidate with
+  `Name = <rawPath>` clears it and bundles.
 - **Option mapping**: each `WebBundleOptions` shape produces the `BundleOptions`/`EmitOptions` the CLI
   would (assert against `BundleCommand`'s mapping); `Obfuscate` drops ordinary comments but keeps the
   license; `StripLicense` drops it.
@@ -150,6 +154,7 @@ Drive everything from in-memory `UploadedFile[]` — no disk.
 - [ ] **≥95% line coverage on `Workspace/`** (Constitution).
 - [ ] Entry-point inference covers single / ambiguous / cyclic / geometry-tiebreak.
 - [ ] Missing-reference enumeration correct incl. fonts excluded and SB4001 filtered from `Diagnostics`.
-- [ ] Layout inference: flat **and** foldered uploads resolve; diamond loads once; ambiguity flagged.
+- [ ] Layout inference: flat **and** foldered/zip uploads resolve; diamond loads once; basename ambiguity
+      surfaces as `AmbiguousReference` with its candidate set (never silently mis-bound).
 - [ ] **Bundle parity proven byte-identical** to the CLI for the fixtures, across Normal/Minify/Obfuscate.
 - [ ] No new `SBxxxx` codes; `ScadBundler.Core` stays dependency-free and WASM-clean.
