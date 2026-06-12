@@ -46,6 +46,14 @@ only).
    client-side `SBxxxx → sentence` map; absent code → just the message). **SB4001 is never shown here** —
    it is the file list's ⚠ rows. (The facade already filters SB4001 from `Diagnostics`; the panel must not
    reintroduce it.)
+6. **Read-only structure tree** (`StructureTree`). Shows the resolved virtual layout (folders → files) so
+   the user can see *why* references resolved as they did. **Display only — never an editor** (no
+   new-folder / drag-to-move; structure comes from how files were uploaded, Spec §3.2).
+7. **Basename-conflict picker** (`ConflictPicker`). For each `ProjectAnalysis.Ambiguous` entry, render a
+   one-click picker — *"`main.scad` needs `utils.scad` — which of your N files?"* — with selectable
+   candidate cards (size/snippet) plus an optional inline **"…or set its path"** field. The choice
+   re-adds the chosen file with `Name = rawPath` via `WorkspaceController.AddOrReplace` (no new facade
+   call), which clears the ambiguity on the next analysis. Folder/zip uploads never produce these.
 
 ---
 
@@ -70,9 +78,10 @@ the map fall back to the raw (already human-facing) message.
 
 **In:** `MissingRow` + drop-to-resolve; ambiguous-root picker + click-to-promote; `MainFileEditor`
 (debounced); used/unused/missing classification in `FileList`; `ProblemsPanel` with the friendly map;
-folder drop wired (`webkitGetAsEntry`) so relative paths feed layout inference.
+the read-only `StructureTree`; the `ConflictPicker` for `Ambiguous` references.
 
-**Out:** options/flags (W3); deploy (W3); preview (W4); Monaco.
+**Out:** options/flags (W3); deploy (W3); preview (W4); Monaco; **any editable/draggable tree** (rejected
+by design — structure comes from the upload, not from in-page folder editing).
 
 ---
 
@@ -84,6 +93,9 @@ folder drop wired (`webkitGetAsEntry`) so relative paths feed layout inference.
   re-analyze (debounce honored).
 - **View-model unit tests** (can live in `ScadBundler.Core.Tests` if the classification is a pure helper):
   used/unused/missing partition for a given `ProjectAnalysis` + upload set.
+- **Conflict picker**: a flat upload with two different-content `utils.scad` → one `ConflictPicker` row
+  listing both candidates; picking one re-adds it with `Name = rawPath` and the bundle appears; the inline
+  path field does the same. (Facade behavior already covered in W0; here it's the bUnit wiring.)
 - **Manual acceptance**: drop only `main.scad` of a real project → see its libs listed as needed → drop
   them one by one → bundle appears; then edit the textarea to remove an `include` → that lib flips to
   "unused"; add a new `use <foo.scad>` → "foo.scad" appears as needed.
@@ -96,6 +108,8 @@ folder drop wired (`webkitGetAsEntry`) so relative paths feed layout inference.
       the files resolves them and produces the bundle.
 - [ ] Ambiguous uploads prompt for the main file; clicking a file re-roots and re-analyzes.
 - [ ] Editing the main-file textarea re-analyzes live and updates used/unused/missing highlighting.
+- [ ] A read-only structure tree shows the resolved layout; a basename conflict offers a one-click picker
+      (+ inline path field) that resolves it — with **no** editable/draggable tree anywhere.
 - [ ] The problems panel shows real syntax/semantic issues with `file:line:col` + friendly text and
       **never** shows SB4001 as an error.
 - [ ] bUnit tests for the missing-file, re-root, and diagnostics-filtering paths pass.

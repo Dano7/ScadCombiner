@@ -72,8 +72,10 @@ seams. Each fact below is verified in the current `src/ScadBundler.Core`:
    bundler unlocks single-file maker sites" pitch, and a subtle "engine loading…" affordance while the
    WASM runtime streams in the background. The page is interactive for reading instantly; the drop zone
    activates when the runtime is ready (a few seconds, cached thereafter).
-2. **The smart drop zone.** One large target: **"Drop all your `.scad` files here (or click to choose)."**
-   Accepts multiple files and a dropped folder. This is the only thing the user must do.
+2. **The smart drop zone.** One large target — **"Drop your project folder, files, or a `.zip` here"** —
+   plus **Choose folder** / **Choose files** buttons. Folder and `.zip` inputs preserve directory
+   structure (§3.2), which is what lets references resolve unambiguously. This is the only thing the user
+   must do.
 3. **File list** (appears after the first drop). The inferred **entry point** is badged at the top
    ("★ main file"); every file in the dependency tree is listed with a status icon:
    - ✓ **loaded** — present and parsed,
@@ -89,6 +91,23 @@ seams. Each fact below is verified in the current `src/ScadBundler.Core`:
 6. **Options** (collapsed expander, §3.5).
 
 ### 3.2 The smart single drop zone & entry-point inference
+
+**Ingestion modes — prevent ambiguity before it happens.** The zone accepts three inputs; the first two
+carry directory structure, so `include <BOSL2/std.scad>` resolves deterministically with no user effort:
+
+- **A folder** — dragged (the JS entries API, `DataTransferItem.webkitGetAsEntry()`) or picked
+  (`<input type=file webkitdirectory>`). Each file keeps its relative path. Dragging the whole project
+  folder is usually the *most natural* action and the lowest friction.
+- **A `.zip`** — unzipped in-browser via the BCL `System.IO.Compression.ZipArchive` (no JS dependency);
+  internal paths preserve structure. Ideal because downloaded models often *arrive* as a zip, and it is
+  the one mode that works reliably on every browser/device (incl. mobile).
+- **Loose files** — the only mode that loses structure, hence the only one that can be ambiguous;
+  basename inference (§6.3) is the safety net here.
+
+A **read-only structure tree** shows the resolved layout for legibility — it is **never an editor** (the
+rare residual conflict is handled by a per-conflict picker, §3.3, not by making the user rebuild a tree).
+Ingestion only produces `UploadedFile`s with the correct `Name`; the facade is unchanged by *how* the
+files arrived.
 
 When files arrive, the app builds an in-memory project and **infers the entry point** (the "main" file)
 — see §6 for the exact rule. The result drives the file list:
@@ -109,6 +128,14 @@ Each needed row is a **drop target**: dropping the matching file there (or anywh
 it, re-analyzes, and — if that completes the tree — produces the bundle. The output stays disabled while
 any non-font reference is unresolved, with a clear "still need N file(s)" message. Fonts are never
 blockers.
+
+**Same-name conflicts (rare — loose-file uploads only).** If two uploaded files share a name a reference
+needs, or one name is needed at two different sub-paths, the app does **not** guess. The affected row
+becomes a one-click **picker** — *"`main.scad` needs `utils.scad` — which of your 2 files?"* with
+selectable cards (size / snippet) — plus an optional inline **"…or set its path"** field to type the
+sub-path (`BOSL2/std.scad`) once for that file. Either choice just re-adds the file with the resolved
+`Name`, so layout inference (§6.3) places it and the conflict disappears. The facade surfaces these as
+`ProjectAnalysis.Ambiguous` (§5.3) with the candidate set; there is **no tree editor**.
 
 ### 3.4 Replacing / editing the main file
 
@@ -212,12 +239,19 @@ public sealed record MissingReference(
     ReferenceOrigin Origin,                   // Include or Use
     IReadOnlyList<string> NeededBy);          // virtual paths of files that reference it
 
+public sealed record AmbiguousReference(    // a reference matched by >1 uploaded file by basename
+    string RawPath,                           // the <path> exactly as written
+    ReferenceOrigin Origin,
+    IReadOnlyList<string> NeededBy,
+    IReadOnlyList<string> Candidates);        // uploaded virtual paths that match by basename — the picker set
+
 public sealed record ProjectAnalysis(
     IReadOnlyList<string> EntryPointCandidates, // in-degree-0 files, geometry-first ordered
     string? InferredRoot,                       // best single guess; null when ambiguous or none
     string? Root,                               // the root actually used (explicit override or inferred)
     DependencyTree? Tree,                       // null when Root is null
     IReadOnlyList<MissingReference> Missing,     // distinct unresolved (non-font) references
+    IReadOnlyList<AmbiguousReference> Ambiguous, // basename collisions awaiting a one-click pick (§3.3)
     IReadOnlyList<DiagnosticDto> Diagnostics);   // parse/semantic problems; SB4001 filtered out
 
 public static class ProjectAnalyzer
@@ -305,18 +339,23 @@ With a chosen `Root`, run `SourceLoader.Load(root, BundleOptions, fs)` and read 
 - Walk from `Root`, emitting a `DependencyNode` per file; recurse `Includes`/`Uses` in source order.
 - An edge with `Target == null` and not `FontPassthrough` and not a cycle ⇒ `Resolved = false`
   (`Origin = Include|Use`); a `FontPassthrough` edge ⇒ `Origin = Font, Resolved = true` (informational).
-- **`Missing`** = the distinct unresolved (non-font) `RawPath`s, each with its `NeededBy` list (the files
-  whose edges carry that raw path). De-dup by `(RawPath, Origin)`.
+- **`Missing`** = the distinct unresolved (non-font) `RawPath`s **with zero basename candidates**, each
+  with its `NeededBy` list (the files whose edges carry that raw path). De-dup by `(RawPath, Origin)`. A
+  `RawPath` with **≥2** candidates is reported in **`Ambiguous`** instead (not `Missing` — the user picks,
+  not uploads); a `RawPath` with exactly **1** candidate is resolved and placed (§6.3), so it is neither.
+  The bundle is produced only when **both** `Missing` and `Ambiguous` are empty.
 - `Diagnostics` = `graph.Diagnostics` (+ a `SemanticAnalyzer.Analyze` pass if surfacing SB3xxx) projected
   to `DiagnosticDto`, **filtering out SB4001** (`DiagnosticCode.IncludeUseNotFound`).
 
 ### 6.3 Layout inference (the analyzer/bundler agreement rule)
 
 So that the **bundle resolves exactly as the analysis predicted**, the analyzer builds the
-`InMemoryFileSystem` deterministically:
+`InMemoryFileSystem` deterministically. **For folder and `.zip` uploads, relative paths are present, so
+this is exact and ambiguity does not arise** (§3.2); basename inference only matters for the loose-file
+mode:
 
-1. **Relative paths known** (folder drop / `webkitRelativePath`): place each file at `"/proj/" + Name`
-   verbatim. References resolve through the normal loader by construction.
+1. **Relative paths known** (folder drop/pick, or `.zip` internal paths): place each file at
+   `"/proj/" + Name` verbatim. References resolve through the normal loader by construction.
 2. **Flat drop** (names are bare file names): place each at `"/proj/" + fileName`. Then, for every
    reference that does **not** resolve at its written sub-path, try to satisfy it by **basename match**
    against an uploaded file; if found, *also place that file's content at the referenced sub-path*
@@ -325,9 +364,11 @@ So that the **bundle resolves exactly as the analysis predicted**, the analyzer 
      `Bundler.Bundle` call resolve the identical file — no basename hack inside the loader, no double-load
      for genuinely distinct files.
    - **Ambiguity** (two uploaded files share a basename a reference needs, or one basename is needed at two
-     different sub-paths): pick none automatically; record it as a `MissingReference` whose message notes
-     the ambiguity, and let the user resolve it by uploading with the right relative path. (Document this;
-     it is rare for hand-assembled maker projects.)
+     different sub-paths): pick none automatically; emit an `AmbiguousReference` (§5.3) carrying the
+     `Candidates` set. The UI resolves it with a one-click picker / inline path field (§3.3), which simply
+     re-adds the chosen file with `Name = rawPath` (reusing `AddOrReplace` — **no new facade method**), so
+     the next analysis places it deterministically. Rare for hand-assembled maker projects, and impossible
+     for folder/zip uploads.
 
 > Implementation note: placing the same content at two virtual paths is intentional and safe — the loader
 > caches by canonical absolute path, so the alias is a *distinct* node only when its path genuinely

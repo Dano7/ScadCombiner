@@ -35,10 +35,12 @@ JSON-serializable DTOs (`ProjectAnalysis`, `DependencyNode`, `MissingReference`,
 Full spec: **[slices/Slice-W1-Blazor-Shell.md](slices/Slice-W1-Blazor-Shell.md)**.
 
 **Scope**: `web/ScadBundler.Web` Blazor WebAssembly project (.NET 10) added to the solution; the landing
-shell (title + "why" blurb, fast first paint while the runtime loads); the single smart drop zone
-(`InputFile` + drag-drop); the file list with entry-point badge and per-file status; live bundling wired
-to W0; **Copy** and **Download**. **Exit**: `dotnet run` serves it; a real multi-file project bundles and
-downloads; the in-browser bundle is byte-identical to the CLI; bUnit smoke tests pass.
+shell (title + "why" blurb, fast first paint while the runtime loads); the single smart drop zone with all
+three **structure-preserving ingestion modes** — folder (`webkitdirectory` + drag-drop entries API), loose
+files, and `.zip` (BCL `ZipArchive`, no JS); the file list with entry-point badge and per-file status;
+live bundling wired to W0; **Copy** and **Download**. **Exit**: `dotnet run` serves it; folder, files, and
+zip uploads each bundle a real multi-file project and download it byte-identical to the CLI; bUnit smoke
+tests pass.
 
 ## Slice W2 — Dependency UX & friendly errors  ·  **spec ready**
 
@@ -48,8 +50,10 @@ Full spec: **[slices/Slice-W2-Dependency-UX.md](slices/Slice-W2-Dependency-UX.md
 point surfaced with manual **re-designate** / **replace** of the main file; an editable, debounced
 main-file `<textarea>`; the problems panel (`file : line : col` + message + a friendly per-`SBxxxx`
 explanation), with **SB4001 never shown as an error** (it drives the missing-file panel); live
-used/unused/missing highlighting when the main file changes. **Exit**: add-a-missing-file and
-swap-the-main-file flows work end-to-end; bUnit tests on the status/diagnostics view models.
+used/unused/missing highlighting when the main file changes; a **read-only structure tree** and a
+**basename-conflict picker** for `Ambiguous` references (one-click pick / inline path — never an editable
+tree). **Exit**: add-a-missing-file, swap-the-main-file, and resolve-a-basename-conflict flows work
+end-to-end; bUnit tests on the status/diagnostics view models.
 
 ## Slice W3 — Options, polish & deploy  ·  **spec ready**
 

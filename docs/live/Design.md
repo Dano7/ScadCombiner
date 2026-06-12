@@ -62,9 +62,11 @@ Putting the logic in `Workspace/` also makes it the reusable "WASM/JSON API": a 
 | `App.razor` / `MainLayout` | Page chrome; mounts the single-page experience (no routing needed in v1). |
 | `Landing` | Title + the "why parametric CAD / why bundle" blurb; renders instantly (static markup). |
 | `EngineStatus` | Tiny "engine loading… / ready" indicator bound to runtime-ready state. |
-| `DropZone` | The single smart drop/upload target. Wraps `InputFile` for click-to-choose and a JS drag-drop handler for drop (incl. folders). Emits `UploadedFile`s to the controller. |
+| `DropZone` | The single smart drop/upload target. Accepts **folder / files / `.zip`** (Design §4): `InputFile` + an `<input webkitdirectory>` button for click-to-choose, and a JS drag-drop handler for files/folders; `.zip` unzipped via BCL `ZipArchive`. Emits `UploadedFile`s (with relative `Name`s) to the controller. |
+| `StructureTree` | **Read-only** view of the resolved virtual layout (folders → files), for legibility. Never an editor. |
 | `FileList` | The dependency tree: entry-point badge, per-file status icons, click-to-promote; hosts `MissingRow`s. |
 | `MissingRow` | A ⚠ "needed" reference rendered as its own drop target ("drop `lib.scad` here"). |
+| `ConflictPicker` | Shown on an `AmbiguousReference` row: selectable candidate cards + an optional "set its path" field; the choice re-adds the file with the resolved `Name` (no new facade call). |
 | `MainFileEditor` | Debounced `<textarea>` bound to the current root's text; edits re-analyze + re-bundle. |
 | `ProblemsPanel` | Non-missing `DiagnosticDto`s: `file : line : col` + message + friendly per-code text. |
 | `OptionsPanel` | The provenance checkbox, the Normal/Minify/Obfuscate radio (+ tooltip), the Advanced sub-section. |
@@ -94,7 +96,8 @@ public sealed class WorkspaceController
     public void SetOptions(WebBundleOptions options);
 
     // Recompute: (fs, Analysis) = ProjectAnalyzer.Analyze(Uploads, Root);
-    //            Root = Analysis.Root; if Root != null && Analysis.Missing is empty:
+    //            Root = Analysis.Root;
+    //            if Root != null && Analysis.Missing is empty && Analysis.Ambiguous is empty:
     //                Bundle = WebBundler.Bundle(fs, Root, Options); else Bundle = null.
 }
 ```
@@ -120,13 +123,18 @@ surface. Keep all of it in one small `wwwroot/interop.js`.
 
 | Need | Mechanism |
 |---|---|
-| Pick files | `InputFile` (managed; streams file contents — **no JS**). |
+| Pick **files** | `InputFile` (managed; streams file contents — **no JS**). |
+| Pick a **folder** | An `<input type=file webkitdirectory>`; each `File.webkitRelativePath` carries the relative path. Cross-browser (Chrome/Edge/Firefox/Safari). The always-reliable structure path. |
 | Drag-and-drop **files** | A JS `drop` handler reads `DataTransfer.files`, passes name+text to .NET via `DotNet.invokeMethodAsync`. |
-| Drag-and-drop **folders** | Same handler walks `DataTransferItem.webkitGetAsEntry()` to recover **relative paths** (`webkitRelativePath`-equivalent), so layout inference (Spec §6.3) gets real structure. |
+| Drag-and-drop **folders** | Same handler walks `DataTransferItem.webkitGetAsEntry()` → recursive `FileSystemDirectoryEntry.createReader().readEntries()` to recover **relative paths**, so layout inference (Spec §6.3) gets real structure. (Note: `DataTransfer.files` alone omits folder contents — the entries API is required. Read entries promptly in the drop handler; filter to `.scad`/`.zip`.) |
+| Read a **`.zip`** | **Managed — BCL `System.IO.Compression.ZipArchive`** over the uploaded stream (works in WASM, **no JS lib**). Entry names give structure → `UploadedFile { Name = entryPath, Text }`. The most reliable mode (incl. mobile). |
 | Copy to clipboard | `navigator.clipboard.writeText` via `IJSRuntime`. |
 | Download | Build a `Blob`, create an object URL, click a synthetic anchor, revoke — small JS function invoked from `OutputPanel`. |
 | Drop-zone styling | CSS `:drag` states + a class toggled by the JS handler. |
 
+All ingestion modes converge on the same output — `UploadedFile`s with a correct `Name` (relative path
+when structure is known). The Core/Workspace facade is **unaffected by how files arrived**; only the
+loose-file mode can produce the basename ambiguity the facade reports via `ProjectAnalysis.Ambiguous`.
 No JS UI framework, no bundler toolchain beyond what the .NET SDK provides.
 
 ---
