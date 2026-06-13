@@ -13,7 +13,7 @@
 
         <FileList Analysis="Controller.Analysis" Uploads="Controller.Uploads" />
 
-        <MainFileEditor Root="Controller.Root" RootText="Controller.RootText" />
+        <MainFileEditor Root="@Controller.Root" RootText="@Controller.RootText" />
 
         @if (Controller.Root is not null && Controller.Bundle is null)
         {
@@ -23,7 +23,7 @@
         <ProblemsPanel Diagnostics="CurrentDiagnostics" />
     }
 
-    <OutputPanel Result="Controller.Bundle" RootPath="Controller.Root" />
+    <OutputPanel Result="Controller.Bundle" RootPath="@Controller.Root" />
 
     @if (Controller.Analysis is not null)
     {

@@ -30,8 +30,15 @@ Pages won't deploy until it lands on `main` (or you manually dispatch the workfl
 **Options, polish & deploy — the shipping slice.** The bundler's flags are now friendly controls that
 re-bundle live and map **exactly** to the CLI; the page is responsive + accessible with clear
 empty/incomplete/error/success states; and a GitHub Actions → Pages workflow publishes the trimmed static
-build. **Core untouched; no Core dependency added; no new `SBxxxx` codes.** Build 0 warnings; **793 tests
-green** (Core 692, CLI 23, Integration 34, **Web 44** [+9]).
+build. **Core untouched; no Core dependency added; no new `SBxxxx` codes.** Build 0 warnings; **794 tests
+green** (Core 692, CLI 23, Integration 34, **Web 45** [+10]).
+
+> **Post-ship fix (2026-06-13):** `App.razor` wired three **string-typed** child params as literals instead
+> of expressions — `MainFileEditor Root`/`RootText` and `OutputPanel RootPath` were `="Controller.Root…"`
+> (no `@`), so the editor displayed the text *"Controller.RootText"* and the download name became
+> *"Controller.bundled.scad"*. Fixed to `="@Controller.…"`. The isolated component tests set params via the
+> typed builder API and never exercised the markup, so the new `AppTests` renders the **full `App`** as a
+> guard (verified to fail pre-fix). See the binding gotcha below.
 
 ### Files added (`web/ScadBundler.Web/`)
 - `Components/OptionsPanel.razor` — a collapsed `<details>` expander (Spec §3.1 item 6). Controls: the
@@ -94,6 +101,12 @@ green** (Core 692, CLI 23, Integration 34, **Web 44** [+9]).
 - **Deploy is gated on the one Settings switch** (Source = GitHub Actions). Until the owner flips it, the
   workflow run will fail at the `deploy-pages` step with a "Pages not enabled" error — that's expected,
   not a workflow bug.
+- **`@` is mandatory on string-typed component params in `.razor` markup.** Razor evaluates a bare
+  `Attr="expr"` as a C# expression only for **non-string** params; for a `string`/`string?` param it's a
+  **literal**, so `RootText="Controller.RootText"` ships the text, not the value (the post-ship fix above).
+  Non-string params (`Analysis`, `Uploads`, `Result`, `Diagnostics`) are fine without `@`. bUnit component
+  tests set params via the builder API and **cannot** catch this — render the full `App` (`AppTests`) to
+  guard markup wiring.
 
 ---
 
