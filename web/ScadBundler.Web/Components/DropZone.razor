@@ -2,7 +2,7 @@
 @inject IJSRuntime JS
 @inject WorkspaceController Controller
 
-<div class="dropzone" @ref="_zone">
+<div class="dropzone" role="group" aria-label="Upload your OpenSCAD project" @ref="_zone">
     <p class="dropzone-hint">Drop your project <strong>folder</strong>, <strong>files</strong>, or a
         <strong>.zip</strong> here</p>
     <div class="dropzone-actions">

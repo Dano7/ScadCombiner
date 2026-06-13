@@ -1,12 +1,12 @@
 @if (Rows.Count > 0)
 {
-    <section class="problems">
+    <section class="problems" aria-label="Problems">
         <h2>Problems</h2>
         <ul class="problem-list">
             @foreach (DiagnosticDto d in Rows)
             {
                 <li class="problem @SeverityClass(d.Severity)">
-                    <span class="problem-sev" title="@d.Severity">@SeverityIcon(d.Severity)</span>
+                    <span class="problem-sev" role="img" aria-label="@d.Severity" title="@d.Severity">@SeverityIcon(d.Severity)</span>
                     <div class="problem-body">
                         <div class="problem-loc"><code>@Location(d)</code> — @d.Message</div>
                         @if (FriendlyDiagnostics.Explain(d.Code) is { } friendly)

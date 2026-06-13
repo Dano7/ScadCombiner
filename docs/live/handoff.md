@@ -8,30 +8,92 @@ should be able to resume from here with no other context.
 
 ## ▶ Next session — start here
 
-**W0 + W1 + W2 are done, green, and committed.** Build **W3 — Options, Polish & Deploy**
-([slices/Slice-W3-Options-Polish-Deploy.md](slices/Slice-W3-Options-Polish-Deploy.md)) — the shipping
-slice. W4 (openscad-wasm preview) stays **deferred — do not build**.
+**W0 + W1 + W2 + W3 are done and green.** The web companion is **feature-complete for v1 and shipping**.
+**W4 (openscad-wasm 3D preview) stays deferred — do not build** unless the owner asks. There is no further
+required web slice; remaining roadmap work is the real-world golden masters (BOSL2/NopSCADlib/dotSCAD) and
+post-v1 stretches (worker-thread bundling, Monaco) — none of them blocking.
 
-**Hosting decision is made: GitHub Pages** (the owner chose it on 2026-06-12). Design §5 and Slice-W3 §2.3
-record the GH-Pages specifics — implement them in W3: a GitHub Actions → Pages workflow on push to `main`
-that runs `dotnet publish -c Release`, **rewrites `<base href>` from `"/"` to the repo sub-path `/<repo>/`**
-(in [wwwroot/index.html](../../web/ScadBundler.Web/wwwroot/index.html)), writes a `404.html` (= `index.html`)
-SPA fallback and a `.nojekyll` marker (so `_framework/` is served), then deploys the artifact. Pages serves
-**gzip, not negotiated Brotli**, so lean on IL trimming for payload.
-
-First things for W3 (the facade option mapping is fully built; this slice is UI + parity + deploy):
-- **`OptionsPanel`** (collapsed): the provenance checkbox, Normal/Minify/Obfuscate radio (+ the "credit
-  stays" tooltip), and the Advanced sub-section (collision strategy, strip-license, keep-comments). Each
-  control builds a new `WebBundleOptions` and calls `WorkspaceController.SetOptions` (already wired) → live
-  re-bundle. **Mirror `BundleCommand` exactly** — parity is sacred (extend the W0 parity fixtures with
-  option permutations).
-- **Polish**: responsive single-column reflow, a11y (keyboard-operable drop zone — a real
-  `<input type=file>` fallback, focus states, ARIA on the status icons + problems list), and the
-  empty/incomplete/error/success states. The stats line can surface renamed/removed counts when a profile
-  ran (`BundleStats` already carries `Renames`/`DefinitionsRemoved`).
-- **README**: point the root [README.md](../../README.md) companion link at the live URL once deployed.
+**One manual step the owner must do once (GitHub Pages):** in the repo's **Settings → Pages → Build and
+deployment**, set **Source = "GitHub Actions"**. That's the only switch — no branch, no extra account. The
+workflow ([../../.github/workflows/deploy-pages.yml](../../.github/workflows/deploy-pages.yml)) then deploys
+on every push to `main` (and via the **Run workflow** button / `workflow_dispatch`). Live URL once enabled:
+**<https://dano7.github.io/ScadCombiner/>** (repo `Dano7/ScadCombiner`; the workflow derives the
+`/<repo>/` base-href dynamically, so a rename just works). This branch ships as a **feature branch** —
+Pages won't deploy until it lands on `main` (or you manually dispatch the workflow from this branch).
 
 > Before adding **any** dependency to `ScadBundler.Core`, stop and ask (Core stays dependency-free).
+
+---
+
+## Slice W3 — done (2026-06-13)
+
+**Options, polish & deploy — the shipping slice.** The bundler's flags are now friendly controls that
+re-bundle live and map **exactly** to the CLI; the page is responsive + accessible with clear
+empty/incomplete/error/success states; and a GitHub Actions → Pages workflow publishes the trimmed static
+build. **Core untouched; no Core dependency added; no new `SBxxxx` codes.** Build 0 warnings; **793 tests
+green** (Core 692, CLI 23, Integration 34, **Web 44** [+9]).
+
+### Files added (`web/ScadBundler.Web/`)
+- `Components/OptionsPanel.razor` — a collapsed `<details>` expander (Spec §3.1 item 6). Controls: the
+  **provenance** checkbox (ticked ⇒ `BundleLicenses=false`, the inverse — default keeps attribution), the
+  **Normal/Minify/Obfuscate** radio (`name="hardening"`, mutually exclusive by the single `Hardening`
+  enum) with the verbatim "credit stays" note shown when a profile is picked, and an **Advanced**
+  sub-`<details>` (collision `<select>` bound via `value=`/`@onchange`; **strip-license** checkbox disabled
+  unless a profile is selected; **keep-comments** checkbox disabled under Minify). Every handler emits a
+  `Opts with { … }` copy through `Controller.SetOptions` → live re-bundle. Injects `WorkspaceController`;
+  re-renders via App's `Changed` cascade (no own subscription needed). Wired into `App.razor` (gated on
+  `Analysis != null`, after `OutputPanel`).
+
+### Files added (deploy / docs)
+- `.github/workflows/deploy-pages.yml` — on push to `main` (+ `workflow_dispatch`): checkout → setup .NET
+  10 → `dotnet workload install wasm-tools` → `dotnet publish -c Release` → **sed-rewrite `<base href>`**
+  from `"/"` to `/${{ github.event.repository.name }}/` in the published `index.html` → `cp index.html
+  404.html` (SPA fallback) + `touch .nojekyll` → `upload-pages-artifact` → `deploy-pages`. Permissions
+  `pages: write` + `id-token: write`; `concurrency: pages`.
+
+### Files changed
+- `Components/OutputPanel.razor` — **error state**: when `Result.Ok` is false the panel shows a
+  `role="alert"` notice ("…must be fixed…see Problems above") instead of the textarea/buttons; the emit
+  controls + stats render only when `CanEmit` (Ok && non-empty). **Stats line** now appends `· N renamed`
+  / `· M removed` when a hardening profile ran (`BundleStats.Renames`/`DefinitionsRemoved`).
+- `Components/FileList.razor`, `ProblemsPanel.razor` — `role="img" aria-label=…` on the ✓/○/ⓕ status and
+  severity icons; `aria-label` region on the problems section.
+- `Components/DropZone.razor` — `role="group" aria-label` (the Choose folder/files buttons are the
+  keyboard path; drag-drop is the enhancement).
+- `wwwroot/css/app.css` — options-panel styles, `.output-error`, a global `:focus-visible` outline, and a
+  `@media (max-width: 640px)` single-column reflow (stacked drop-zone actions, wrapped headers/actions).
+- `docs/README.md` — companion link now points at the live URL + an "or use the web version" pointer.
+
+### Quality / verification
+- **Build: 0 warnings. Tests: 793 green.** New: `OptionsPanelTests` (8 — provenance inversion, radio
+  mutual-exclusion, strip-license enable-gating, keep-comments disable-under-minify, collision select,
+  live re-bundle) + 1 `OutputPanelTests` (renamed/removed stats; the two old "disabled buttons" tests
+  became "error notice / no buttons" for the new contract) + `BundleParityTests.OptionPermutations` (10
+  knob combinations, all byte-identical to the disk/CLI mapping).
+- **Release publish verified locally:** trimmed + invariant-globalization, Brotli **and** gzip emitted
+  (41 each), ~2.3 MB compressed runtime; published `index.html` carries `<base href="/" />` (so the sed
+  matches). The workflow's post-publish steps were **simulated locally** (sed → `/ScadCombiner/`, 404
+  copy, `.nojekyll`, `_framework/` intact, zero stray `href="/"`).
+- **App boots:** `dotnet run … --urls http://localhost:5219` serves `/`, `_framework/blazor.webassembly.js`,
+  `interop.js`, `css/app.css` (all 200); `#app` shell + the new `.options-body` CSS present.
+
+### Gotchas the next session must know
+- **`OptionsPanel` reads `Controller.Options` directly** (no `[Parameter]`) and re-renders only because
+  App re-renders on `Changed`. In a **standalone bUnit** test it still re-renders after its *own* control
+  event (Blazor re-renders a component after handling its event), which is why the enable/disable-gating
+  assertions work without an App host — but if you render it under a different parent that suppresses
+  cascade, subscribe to `Changed` like `App` does.
+- **`keep-comments` is effectively a Normal-mode knob.** The emit mapping sets
+  `EmitOptions.PreserveComments = Hardening==None && PreserveComments`, so under Minify/Obfuscate the
+  toggle changes `BundleOptions.PreserveComments` but the emitted bytes are unchanged (comments already
+  dropped at emit). It's disabled under Minify in the UI; left enabled-but-inert under Obfuscate to match
+  the CLI (which accepts `--no-preserve-comments --obfuscate`). Parity holds either way.
+- **The `.NET 10 SDK on CI`**: the workflow pins `dotnet-version: '10.0.x'` and installs the `wasm-tools`
+  workload before publish. If a future runner lacks 10.0 GA, switch to a `global.json` pin or add
+  `dotnet-quality: preview` — don't silently let it fall back to an older SDK (the project is net10.0).
+- **Deploy is gated on the one Settings switch** (Source = GitHub Actions). Until the owner flips it, the
+  workflow run will fail at the `deploy-pages` step with a "Pages not enabled" error — that's expected,
+  not a workflow bug.
 
 ---
 

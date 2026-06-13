@@ -16,7 +16,7 @@
                         <li class="file">
                             <button type="button" class="link make-main"
                                     @onclick="@(() => Controller.SetRoot(candidate))">★ use as main</button>
-                            <span class="icon loaded" title="loaded">✓</span> @Display(candidate)
+                            <span class="icon loaded" role="img" aria-label="loaded" title="loaded">✓</span> @Display(candidate)
                         </li>
                     }
                 </ul>
@@ -41,7 +41,7 @@
                             <button type="button" class="link make-main" title="make this the main file"
                                     @onclick="@(() => Controller.SetRoot(file.VirtualPath))">★ make main</button>
                         }
-                        <span class="icon @IconClass(file.Usage)" title="@UsageTitle(file.Usage)">@IconChar(file.Usage)</span>
+                        <span class="icon @IconClass(file.Usage)" role="img" aria-label="@UsageTitle(file.Usage)" title="@UsageTitle(file.Usage)">@IconChar(file.Usage)</span>
                         @Display(file.VirtualPath)
                         @if (file.Usage == FileUsage.Unused)
                         {
@@ -51,7 +51,7 @@
                 }
                 @foreach (string font in Fonts)
                 {
-                    <li class="file font"><span class="icon font" title="font">ⓕ</span> @font</li>
+                    <li class="file font"><span class="icon font" role="img" aria-label="font" title="font">ⓕ</span> @font</li>
                 }
             </ul>
         }

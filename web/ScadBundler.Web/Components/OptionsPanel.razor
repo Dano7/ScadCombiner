@@ -1,0 +1,119 @@
+@using ScadBundler.Core.Inlining
+@inject WorkspaceController Controller
+
+<details class="options">
+    <summary>Options</summary>
+
+    <div class="options-body">
+        <label class="opt-row">
+            <input type="checkbox" checked="@(!Opts.BundleLicenses)" @onchange="OnProvenanceChanged" />
+            <span>
+                Remove provenance banners &amp; license aggregation
+                <span class="opt-note">By default each library's leading license/header is hoisted to the
+                    top of the bundle and a <code>// ===== include &lt;lib.scad&gt; =====</code> banner
+                    separates the inlined sections. Untick to drop that attribution.</span>
+            </span>
+        </label>
+
+        <fieldset class="opt-profile">
+            <legend>Output</legend>
+            <label class="opt-radio">
+                <input type="radio" name="hardening" checked="@(Opts.Hardening == HardeningProfile.None)"
+                       @onchange="@(() => SetHardening(HardeningProfile.None))" />
+                <span>Normal — readable, formatted</span>
+            </label>
+            <label class="opt-radio">
+                <input type="radio" name="hardening" checked="@(Opts.Hardening == HardeningProfile.Minify)"
+                       @onchange="@(() => SetHardening(HardeningProfile.Minify))" />
+                <span>Minify — smallest file</span>
+            </label>
+            <label class="opt-radio">
+                <input type="radio" name="hardening" checked="@(Opts.Hardening == HardeningProfile.Obfuscate)"
+                       @onchange="@(() => SetHardening(HardeningProfile.Obfuscate))" />
+                <span>Obfuscate — hardest to reverse-engineer</span>
+            </label>
+
+            @if (Opts.Hardening != HardeningProfile.None)
+            {
+                <p class="opt-credit" role="note">
+                    This isn't about denying credit — the license stays. Minify/obfuscate just nudges the
+                    curious to learn from the <strong>original</strong> sources listed at the top, not from
+                    this flattened copy.
+                </p>
+            }
+        </fieldset>
+
+        <details class="options-advanced">
+            <summary>Advanced</summary>
+
+            <div class="opt-advanced-body">
+                <label class="opt-field">
+                    <span class="opt-label">Collision strategy</span>
+                    <select value="@Opts.OnCollision" @onchange="OnCollisionChanged">
+                        @foreach ((CollisionStrategy strategy, string text) in CollisionChoices)
+                        {
+                            <option value="@strategy">@text</option>
+                        }
+                    </select>
+                </label>
+
+                <label class="opt-row @(Opts.Hardening == HardeningProfile.None ? "opt-disabled" : null)">
+                    <input type="checkbox" checked="@Opts.StripLicense"
+                           disabled="@(Opts.Hardening == HardeningProfile.None)" @onchange="OnStripLicenseChanged" />
+                    <span>
+                        Strip license under minify/obfuscate
+                        <span class="opt-note">Drops the aggregated license header in a hardened bundle.
+                            Only available with Minify or Obfuscate selected.</span>
+                    </span>
+                </label>
+
+                <label class="opt-row @(Opts.Hardening == HardeningProfile.Minify ? "opt-disabled" : null)">
+                    <input type="checkbox" checked="@Opts.PreserveComments"
+                           disabled="@(Opts.Hardening == HardeningProfile.Minify)" @onchange="OnPreserveCommentsChanged" />
+                    <span>
+                        Keep comments
+                        <span class="opt-note">Ignored under Minify (comments are dropped to save space).</span>
+                    </span>
+                </label>
+            </div>
+        </details>
+    </div>
+</details>
+
+@code {
+    // The collision strategies in CLI order, each with a one-line description (mirrors --on-collision help).
+    private static readonly (CollisionStrategy Strategy, string Text)[] CollisionChoices =
+    [
+        (CollisionStrategy.Auto, "Auto — correct for almost everyone (recommended)"),
+        (CollisionStrategy.Prefix, "Prefix — namespace every colliding name"),
+        (CollisionStrategy.Error, "Error — refuse to bundle on any collision"),
+        (CollisionStrategy.KeepFirst, "Keep first — first definition wins"),
+        (CollisionStrategy.KeepLast, "Keep last — last definition wins (OpenSCAD default)"),
+    ];
+
+    // The live options the controller holds; every handler emits a `with`-modified copy back through it.
+    private WebBundleOptions Opts => Controller.Options;
+
+    // "Remove provenance" is the inverse of BundleLicenses (default keeps attribution).
+    private void OnProvenanceChanged(ChangeEventArgs e) =>
+        Controller.SetOptions(Opts with { BundleLicenses = !AsBool(e) });
+
+    private void SetHardening(HardeningProfile profile) =>
+        Controller.SetOptions(Opts with { Hardening = profile });
+
+    private void OnCollisionChanged(ChangeEventArgs e)
+    {
+        if (Enum.TryParse(e.Value?.ToString(), out CollisionStrategy strategy))
+        {
+            Controller.SetOptions(Opts with { OnCollision = strategy });
+        }
+    }
+
+    private void OnStripLicenseChanged(ChangeEventArgs e) =>
+        Controller.SetOptions(Opts with { StripLicense = AsBool(e) });
+
+    private void OnPreserveCommentsChanged(ChangeEventArgs e) =>
+        Controller.SetOptions(Opts with { PreserveComments = AsBool(e) });
+
+    private static bool AsBool(ChangeEventArgs e) => e.Value is true || e.Value?.ToString() == "true";
+}

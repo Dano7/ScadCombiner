@@ -1,0 +1,70 @@
+name: Deploy ScadBundler Live to GitHub Pages
+
+# Publishes the Blazor WebAssembly app (web/ScadBundler.Web) to GitHub Pages on every push to main.
+# The published output is a static wwwroot/; this workflow rewrites <base href> to the repo sub-path,
+# adds an SPA 404 fallback and a .nojekyll marker, then deploys the artifact (Slice-W3 §2.3, Design §5).
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Allow the GITHUB_TOKEN to deploy to Pages and mint an OIDC token for the deploy step.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One in-flight Pages deployment at a time; don't cancel a running publish.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      # Provides the WebAssembly tooling the Release publish (trimming/relinking) expects.
+      - name: Install wasm-tools workload
+        run: dotnet workload install wasm-tools
+
+      - name: Publish
+        run: dotnet publish web/ScadBundler.Web/ScadBundler.Web.csproj -c Release -o release
+
+      # GitHub Pages serves a user/repo project page under https://<user>.github.io/<repo>/, so the app's
+      # asset base must be the repo sub-path rather than "/". Rewrite it in the published index.html.
+      - name: Rewrite base href for the repo sub-path
+        run: |
+          repo="${{ github.event.repository.name }}"
+          sed -i "s|<base href=\"/\" />|<base href=\"/${repo}/\" />|g" release/wwwroot/index.html
+
+      # SPA deep-link fallback: GitHub Pages serves 404.html for unknown paths; making it a copy of
+      # index.html lets the Blazor router take over. .nojekyll stops Pages from hiding _framework/.
+      - name: Add SPA fallback and disable Jekyll
+        run: |
+          cp release/wwwroot/index.html release/wwwroot/404.html
+          touch release/wwwroot/.nojekyll
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: release/wwwroot
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

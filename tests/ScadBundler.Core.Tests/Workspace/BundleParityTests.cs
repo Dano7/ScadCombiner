@@ -73,6 +73,44 @@ public sealed class BundleParityTests
         AssertParity(uploads, "main.scad", new WebBundleOptions(Hardening: profile, StripLicense: true));
     }
 
+    [Fact]
+    public void OptionPermutations_AreByteIdenticalToDisk()
+    {
+        UploadedFile[] uploads =
+        [
+            new(
+                "main.scad",
+                "// MIT License — sample header\n"
+                + "include <lib.scad>\n"
+                + "/* [Dimensions] */\n"
+                + "// width of the thing\n"
+                + "width = 20; // [10:50]\n"
+                + "thing(width);\n"),
+            new("lib.scad", "// helper library\nmodule thing(w) cube(w);\n"),
+        ];
+
+        // Every W3 knob permutation must map to the same bytes the equivalent CLI flags produce. AssertParity
+        // runs the in-memory facade and a disk fixture (mirroring BundleCommand's mapping) and compares.
+        WebBundleOptions[] permutations =
+        [
+            new(OnCollision: CollisionStrategy.Auto),
+            new(OnCollision: CollisionStrategy.Prefix),
+            new(OnCollision: CollisionStrategy.Error),
+            new(OnCollision: CollisionStrategy.KeepFirst),
+            new(OnCollision: CollisionStrategy.KeepLast),
+            new(PreserveComments: false),
+            new(BundleLicenses: false, PreserveComments: false),
+            new(Hardening: HardeningProfile.Minify, OnCollision: CollisionStrategy.Prefix),
+            new(Hardening: HardeningProfile.Minify, PreserveComments: false),
+            new(Hardening: HardeningProfile.Obfuscate, StripLicense: true, OnCollision: CollisionStrategy.KeepLast),
+        ];
+
+        foreach (WebBundleOptions options in permutations)
+        {
+            AssertParity(uploads, "main.scad", options);
+        }
+    }
+
     // -------------------------------------------------------------------------------------------------
 
     private static void AssertParity(UploadedFile[] uploads, string rootName, WebBundleOptions options)

@@ -523,6 +523,213 @@ button:disabled {
     font-size: .85rem;
 }
 
+.output-error {
+    margin: .5rem 0 0;
+    color: var(--warn);
+    font-size: .9rem;
+}
+
+/* ---- Options panel ---- */
+.options {
+    margin-top: 1.75rem;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0;
+}
+
+.options > summary,
+.options-advanced > summary {
+    cursor: pointer;
+    padding: 1rem 1.5rem;
+    font-size: 1.05rem;
+    font-weight: 600;
+    list-style: none;
+}
+
+.options > summary::-webkit-details-marker,
+.options-advanced > summary::-webkit-details-marker {
+    display: none;
+}
+
+.options > summary::before,
+.options-advanced > summary::before {
+    content: "▸ ";
+    color: var(--muted);
+}
+
+.options[open] > summary::before,
+.options-advanced[open] > summary::before {
+    content: "▾ ";
+}
+
+.options-body {
+    padding: 0 1.5rem 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.opt-row {
+    display: flex;
+    align-items: flex-start;
+    gap: .55rem;
+    cursor: pointer;
+}
+
+.opt-row input[type="checkbox"] {
+    margin-top: .2rem;
+    flex: 0 0 auto;
+}
+
+.opt-note {
+    display: block;
+    color: var(--muted);
+    font-size: .8rem;
+    margin-top: .15rem;
+}
+
+.opt-disabled {
+    opacity: .5;
+    cursor: not-allowed;
+}
+
+.opt-profile {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: .75rem 1rem;
+    margin: 0;
+}
+
+.opt-profile legend {
+    font-size: .85rem;
+    color: var(--muted);
+    padding: 0 .35rem;
+}
+
+.opt-radio {
+    display: flex;
+    align-items: center;
+    gap: .55rem;
+    padding: .2rem 0;
+    cursor: pointer;
+}
+
+.opt-credit {
+    margin: .6rem 0 0;
+    padding: .55rem .7rem;
+    background: var(--panel-2);
+    border-radius: 8px;
+    color: var(--muted);
+    font-size: .82rem;
+}
+
+.options-advanced {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+}
+
+.options-advanced > summary {
+    padding: .65rem 1rem;
+    font-size: .92rem;
+}
+
+.opt-advanced-body {
+    padding: 0 1rem 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: .85rem;
+}
+
+.opt-field {
+    display: flex;
+    flex-direction: column;
+    gap: .3rem;
+}
+
+.opt-label {
+    font-size: .85rem;
+    color: var(--muted);
+}
+
+.opt-field select {
+    background: #0c0f1a;
+    color: var(--ink);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: .4rem .5rem;
+    font-size: .88rem;
+}
+
+/* ---- Focus visibility (keyboard a11y) ---- */
+:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 4px;
+}
+
+button:focus-visible,
+summary:focus-visible,
+select:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+.link:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+/* ---- Responsive (mobile single column) ---- */
+@media (max-width: 640px) {
+    .page {
+        padding: 1.25rem .9rem 3rem;
+    }
+
+    .landing h1 {
+        font-size: 1.8rem;
+    }
+
+    .tagline {
+        font-size: 1.05rem;
+    }
+
+    .dropzone {
+        padding: 1.5rem 1rem;
+    }
+
+    .dropzone-actions {
+        flex-direction: column;
+    }
+
+    .dropzone-actions button {
+        width: 100%;
+    }
+
+    .filelist, .output, .structure, .editor, .problems,
+    .options-body, .options > summary {
+        padding-left: 1rem;
+        padding-right: 1rem;
+    }
+
+    .output-header,
+    .editor-header {
+        flex-wrap: wrap;
+        gap: .35rem;
+    }
+
+    .output-actions {
+        flex-wrap: wrap;
+    }
+
+    .output-actions button {
+        flex: 1 1 auto;
+    }
+
+    .conflict-actions {
+        flex-direction: column;
+        align-items: stretch;
+    }
+}
+
 /* ---- Blazor error UI ---- */
 #blazor-error-ui {
     display: none;

@@ -27,23 +27,41 @@ public sealed class OutputPanelTests : TestContext
     }
 
     [Fact]
-    public void DisablesButtons_WhenNotOk()
+    public void ShowsErrorNotice_AndNoEmitButtons_WhenNotOk()
     {
         var blocked = new WebBundleResult(string.Empty, false, [], new BundleStats(0, 0, 0, 0, 0));
 
         IRenderedComponent<OutputPanel> cut = RenderComponent<OutputPanel>(p => p.Add(c => c.Result, blocked));
 
-        Assert.All(cut.FindAll("button"), b => Assert.True(b.HasAttribute("disabled")));
+        Assert.Empty(cut.FindAll("button"));                     // no Copy/Download offered
+        Assert.Contains("role=\"alert\"", cut.Markup);
+        Assert.Contains("must be fixed", cut.Markup);            // explains the error state
     }
 
     [Fact]
-    public void DisablesButtons_WhenOkButEmpty()
+    public void RendersNoButtonsOrError_WhenOkButEmpty()
     {
+        // Degenerate (Ok=true with no text never occurs in the real pipeline): show neither emit controls
+        // nor the error notice — the error alert is reserved for a genuine !Ok bundle.
         var empty = new WebBundleResult(string.Empty, true, [], new BundleStats(0, 0, 0, 0, 0));
 
         IRenderedComponent<OutputPanel> cut = RenderComponent<OutputPanel>(p => p.Add(c => c.Result, empty));
 
-        Assert.All(cut.FindAll("button"), b => Assert.True(b.HasAttribute("disabled")));
+        Assert.Empty(cut.FindAll("button"));
+        Assert.DoesNotContain("must be fixed", cut.Markup);
+    }
+
+    [Fact]
+    public void StatsLine_SurfacesRenamedAndRemoved_WhenProfileRan()
+    {
+        var hardened = new WebBundleResult(
+            "x();\n", true, [], new BundleStats(FilesInlined: 1, OutputBytes: 5, Renames: 2, DefinitionsRemoved: 3, Normalizations: 0));
+
+        IRenderedComponent<OutputPanel> cut = RenderComponent<OutputPanel>(p => p.Add(c => c.Result, hardened));
+
+        Assert.Contains("2 file", cut.Markup);                   // 1 inlined + root
+        Assert.Contains("2 renamed", cut.Markup);
+        Assert.Contains("3 removed", cut.Markup);
     }
 
     [Fact]

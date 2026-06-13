@@ -2,22 +2,35 @@
 
 @if (Result is { } result)
 {
-    <section class="output">
+    <section class="output" aria-label="Bundle output">
         <div class="output-header">
             <h2>Bundle</h2>
-            <span class="stats">@StatsLine</span>
-        </div>
-
-        <textarea class="output-text" readonly rows="16">@result.Text</textarea>
-
-        <div class="output-actions">
-            <button type="button" @onclick="CopyAsync" disabled="@(!CanEmit)">Copy</button>
-            <button type="button" @onclick="DownloadAsync" disabled="@(!CanEmit)">Download @FileName</button>
-            @if (_copied)
+            @if (CanEmit)
             {
-                <span class="copied" role="status">Copied!</span>
+                <span class="stats">@StatsLine</span>
             }
         </div>
+
+        @if (CanEmit)
+        {
+            <textarea class="output-text" readonly rows="16" aria-label="Bundled OpenSCAD output">@result.Text</textarea>
+
+            <div class="output-actions">
+                <button type="button" @onclick="CopyAsync">Copy</button>
+                <button type="button" @onclick="DownloadAsync">Download @FileName</button>
+                @if (_copied)
+                {
+                    <span class="copied" role="status">Copied!</span>
+                }
+            </div>
+        }
+        else if (!result.Ok)
+        {
+            <p class="output-error" role="alert">
+                This project has errors that must be fixed before it can be bundled — see
+                <strong>Problems</strong> above.
+            </p>
+        }
     </section>
 }
 
@@ -46,11 +59,25 @@
                 return string.Empty;
             }
 
-            int files = result.Stats.FilesInlined + 1; // inlined count excludes the root file
-            double kb = result.Stats.OutputBytes / 1024.0;
-            return string.Create(
+            BundleStats stats = result.Stats;
+            int files = stats.FilesInlined + 1; // inlined count excludes the root file
+            double kb = stats.OutputBytes / 1024.0;
+            var line = new System.Text.StringBuilder(string.Create(
                 System.Globalization.CultureInfo.InvariantCulture,
-                $"{files} file{(files == 1 ? "" : "s")} combined · {kb:0.0} KB");
+                $"{files} file{(files == 1 ? "" : "s")} combined · {kb:0.0} KB"));
+
+            // When a hardening profile ran, surface what it changed (BundleStats counts; 0 in Normal mode).
+            if (stats.Renames > 0)
+            {
+                line.Append(System.Globalization.CultureInfo.InvariantCulture, $" · {stats.Renames} renamed");
+            }
+
+            if (stats.DefinitionsRemoved > 0)
+            {
+                line.Append(System.Globalization.CultureInfo.InvariantCulture, $" · {stats.DefinitionsRemoved} removed");
+            }
+
+            return line.ToString();
         }
     }
 

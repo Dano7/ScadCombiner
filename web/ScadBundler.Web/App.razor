@@ -24,6 +24,11 @@
     }
 
     <OutputPanel Result="Controller.Bundle" RootPath="Controller.Root" />
+
+    @if (Controller.Analysis is not null)
+    {
+        <OptionsPanel />
+    }
 </div>
 
 @code {
