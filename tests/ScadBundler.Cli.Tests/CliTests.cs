@@ -180,6 +180,26 @@ public sealed class CliTests
     }
 
     [Fact]
+    public void StaticLint_RedefinitionAndUnknown_SuppressedByDefault_SurfacedUnderLint()
+    {
+        // SB3004 (module redefinition) and SB3005 (unknown variable) are static approximations of
+        // OpenSCAD's evaluation-time behavior — it silently last-wins on redefinition and reads an
+        // unknown name as `undef`. The bundle is clean by default and reports them only under --lint.
+        using var project = new TempProject(
+            ("main.scad", "module m() cube(1);\nmodule m() sphere(missing_var);\nm();"));
+
+        int quiet = Run(project, ["bundle", project.Path("main.scad"), "-o", "-"], out _, out string quietErr);
+        Assert.Equal(0, quiet);
+        Assert.DoesNotContain("SB3004", quietErr, StringComparison.Ordinal);
+        Assert.DoesNotContain("SB3005", quietErr, StringComparison.Ordinal);
+
+        int lint = Run(project, ["bundle", project.Path("main.scad"), "-o", "-", "--lint"], out _, out string lintErr);
+        Assert.Equal(0, lint);
+        Assert.Contains("SB3004", lintErr, StringComparison.Ordinal);
+        Assert.Contains("SB3005", lintErr, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void DryRun_WritesNothing_ButReportsSummary()
     {
         using var project = new TempProject(("main.scad", "cube(1);"));

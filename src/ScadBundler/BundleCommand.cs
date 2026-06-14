@@ -67,7 +67,8 @@ internal static class BundleCommand
             options.BundleLicenses,
             options.PreserveComments,
             hardening,
-            options.StripLicense);
+            options.StripLicense,
+            options.Lint);
 
         // Emit: minify collapses whitespace + drops non-sticky comments; obfuscate keeps formatting but
         // drops ordinary comments (the aggregated license + Customizer fence are sticky and survive both).
@@ -150,6 +151,8 @@ internal static class BundleCommand
         public bool Diff { get; set; }
 
         public bool Verbose { get; set; }
+
+        public bool Lint { get; set; }
     }
 
     private static bool TryParse(string[] args, out Options options, out string? error, out bool help)
@@ -227,6 +230,9 @@ internal static class BundleCommand
                     break;
                 case "--verbose":
                     options.Verbose = true;
+                    break;
+                case "--lint":
+                    options.Lint = true;
                     break;
                 default:
                     if (arg.StartsWith('-'))
@@ -433,6 +439,10 @@ internal static class BundleCommand
           --dry-run                  Run the pipeline but write nothing
           --diff                     Print a unified diff of input vs bundled output
           --verbose                  List inlined files, renames, and normalizations
+          --lint                     Report static source checks OpenSCAD skips at parse time:
+                                     unknown references (SB3005) and module/function redefinitions
+                                     (SB3004). Off by default — these false-positive on real-world
+                                     libraries (dead code, optional config vars, last-wins overrides)
           -h, --help                 Show this help
 
         Exit codes: 0 success, 1 error-severity diagnostics, 2 usage error.

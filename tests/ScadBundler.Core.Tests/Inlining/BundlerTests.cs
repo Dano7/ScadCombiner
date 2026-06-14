@@ -51,17 +51,37 @@ public sealed class BundlerTests
     }
 
     [Fact]
-    public void Bundle_WithinFileRedefinition_ReportsRedefinedOnce_NotPerStage()
+    public void Bundle_WithinFileRedefinition_UnderLint_ReportsRedefinedOnce_NotPerStage()
     {
         using var temp = new TempProject();
         temp.Write("main.scad", "function f(x) = x + 1;\nfunction f(x) = x + 2;\necho(f(1));");
 
-        BundleResult result = Bundler.Bundle(temp.At("main.scad"), new BundleOptions([]));
+        // SB3004 is a static-lint finding, suppressed unless --lint (OpenSCAD silently last-wins).
+        BundleResult result = Bundler.Bundle(temp.At("main.scad"), new BundleOptions([], Lint: true));
 
         // The semantic pass (within-file scope) and the inliner (merged-set collision) both detect the
         // same redefinition with an identical code/span/message; the bundler collapses the duplicate so
         // it surfaces once, not once per stage.
         Assert.Equal(1, result.Diagnostics.Count(d => d.Code == DiagnosticCode.DefinitionRedefined));
+    }
+
+    [Fact]
+    public void Bundle_StaticLint_SuppressedByDefault_SurfacedUnderLint()
+    {
+        using var temp = new TempProject();
+        // A module/function redefinition (SB3004) and an unknown reference (SB3005). OpenSCAD reports
+        // neither at parse time — redefinitions silently last-win, and an unknown read is `undef`
+        // (warned only at evaluation time). The bundle stays silent by default and surfaces both under
+        // --lint; the collision is resolved (last-wins) either way.
+        temp.Write("main.scad", "module m() cube(1);\nmodule m() sphere(unknown_var);\nm();");
+
+        BundleResult quiet = Bundler.Bundle(temp.At("main.scad"), new BundleOptions([]));
+        Assert.DoesNotContain(quiet.Diagnostics, d => d.Code == DiagnosticCode.DefinitionRedefined);
+        Assert.DoesNotContain(quiet.Diagnostics, d => d.Code == DiagnosticCode.UnknownReference);
+
+        BundleResult lint = Bundler.Bundle(temp.At("main.scad"), new BundleOptions([], Lint: true));
+        Assert.Contains(lint.Diagnostics, d => d.Code == DiagnosticCode.DefinitionRedefined);
+        Assert.Contains(lint.Diagnostics, d => d.Code == DiagnosticCode.UnknownReference);
     }
 
     [Fact]

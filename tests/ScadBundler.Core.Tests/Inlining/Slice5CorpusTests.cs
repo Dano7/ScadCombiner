@@ -51,19 +51,25 @@ public sealed class Slice5CorpusTests
     {
         string optionsPath = Path.Combine(dir, "options.txt");
         CollisionStrategy strategy = CollisionStrategy.Auto;
+        bool lint = false;
         if (File.Exists(optionsPath))
         {
             string[] tokens = File.ReadAllLines(optionsPath);
             for (int i = 0; i < tokens.Length; i++)
             {
-                if (tokens[i].Trim() == "--on-collision" && i + 1 < tokens.Length)
+                string token = tokens[i].Trim();
+                if (token == "--on-collision" && i + 1 < tokens.Length)
                 {
                     strategy = Enum.Parse<CollisionStrategy>(tokens[i + 1].Trim(), ignoreCase: true);
+                }
+                else if (token == "--lint")
+                {
+                    lint = true; // surface SB3004/SB3005 static-lint findings (suppressed by default)
                 }
             }
         }
 
-        return new BundleOptions([dir], strategy);
+        return new BundleOptions([dir], strategy, Lint: lint);
     }
 
     private static string Format(IReadOnlyList<Diagnostic> diagnostics, string caseDir)

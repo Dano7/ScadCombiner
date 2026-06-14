@@ -58,6 +58,7 @@ public static class Bundler
                 .Concat(semantics.Diagnostics)
                 .Concat(inlinerDiagnostics)
                 .Concat(transformDiagnostics.ToList())
+                .Where(d => options.Lint || !IsStaticLint(d))
                 .OrderBy(d => d.Span.File.Path, StringComparer.Ordinal)
                 .ThenBy(d => d.Span.Start.Offset)
                 .ThenBy(d => d.Code, StringComparer.Ordinal)
@@ -66,4 +67,14 @@ public static class Bundler
 
         return new BundleResult(output, all);
     }
+
+    // The static source-lint findings the bundler can derive but OpenSCAD does NOT report at parse time:
+    // an unknown reference (SB3005) — OpenSCAD reads it as `undef`, warning only at evaluation time if the
+    // expression is ever reached — and a module/function redefinition (SB3004) — OpenSCAD's flat scope
+    // silently last-wins (parser.y warns only for VARIABLE reassignment, SB3003, which is kept). Both are
+    // static approximations of a dynamic property, so they false-positive on dead code, short-circuited
+    // reads, optional config variables, and intra-library duplicates in real libraries. They are
+    // suppressed unless `--lint` (BundleOptions.Lint) is set; the underlying collision is still resolved.
+    private static bool IsStaticLint(Diagnostic diagnostic) =>
+        diagnostic.Code is DiagnosticCode.UnknownReference or DiagnosticCode.DefinitionRedefined;
 }

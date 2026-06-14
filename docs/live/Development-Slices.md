@@ -73,3 +73,17 @@ Full spec stub: **[slices/Slice-W4-Preview-Stretch.md](slices/Slice-W4-Preview-S
 scope; documented so v1 is architected to feed it (the bundle text is the input). Lazy-load
 openscad-wasm (~10–30 MB), render the bundle to a mesh (three.js), read Customizer parameters. Not
 detailed.
+
+## Slice W5 — Large-project UX: structure, smart resolution & responsiveness  ·  **design / proposed**
+
+Full spec: **[slices/Slice-W5-Large-Project-UX.md](slices/Slice-W5-Large-Project-UX.md)**. Surfaced by the
+[ParametricCompoundPlanetary + BOSL2 validation](../Real-World-Validation.md). Makes the page hold up on
+big, multi-library, loosely-uploaded projects: an **organize layer** (editable structure tree —
+create-folder / move / set-path, all expressed as upload `Name` edits, no Core change) so the user can
+supply structure the basename fixpoint can't infer; **smarter resolution** (library-root learning,
+sub-path-aware matching, visible auto-placement provenance) and **common-library presets** (BOSL2 /
+NopSCADlib / dotSCAD on demand); and **responsiveness** (get the recompute off the UI thread with
+yield-based progress + debounce/cancel, then a Web Worker; share one parse across analyzer/loader; lazy
+emit) so a ~2.9 MB / 33-file bundle never freezes the browser. **Exit**: a colliding loose multi-library
+upload bundles without re-zipping; no "page unresponsive" prompt on a BOSL2-scale project; bundle output
+and `SBxxxx` codes unchanged; CLI byte-parity preserved.

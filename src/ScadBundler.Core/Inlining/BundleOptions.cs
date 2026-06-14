@@ -63,13 +63,21 @@ public enum HardeningProfile
 /// <param name="StripLicense">When <c>true</c>, the aggregated license header is <b>not</b> kept through a
 /// hardening profile (it is emitted in normal mode but dropped under <c>--minify</c>/<c>--obfuscate</c>
 /// like any other comment). Default <c>false</c> — legal text survives a hardened bundle.</param>
+/// <param name="Lint">When <c>true</c>, surface the static source-lint diagnostics the bundler can derive
+/// but OpenSCAD does <b>not</b> report at parse time — unknown references (SB3005) and module/function
+/// redefinitions (SB3004). Off by default so the bundle stays silent wherever OpenSCAD is silent: those
+/// checks are static approximations of OpenSCAD's <i>evaluation-time</i> behavior (unknown reads yield
+/// <c>undef</c>; redefinitions silently last-win), so they false-positive on dead code, short-circuited
+/// reads, optional config variables, and intra-library duplicates in real-world libraries (e.g. BOSL2).
+/// The collision is still resolved either way; <c>--lint</c> only controls whether it is reported.</param>
 public sealed record BundleOptions(
     IReadOnlyList<string> LibraryPaths,
     CollisionStrategy OnCollision = CollisionStrategy.Auto,
     bool BundleLicenses = true,
     bool PreserveComments = true,
     HardeningProfile Hardening = HardeningProfile.None,
-    bool StripLicense = false)
+    bool StripLicense = false,
+    bool Lint = false)
 {
     /// <summary>Default options: no extra library paths, <see cref="CollisionStrategy.Auto"/>.</summary>
     public static BundleOptions Default { get; } = new([]);

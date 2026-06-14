@@ -17,6 +17,6 @@ scadbundler bundle myproject.scad -o bundled.scad
 
 ## Documentation
 
-Start with **[Design.md](Design.md)** — architecture overview + the full document map. Key references: [Constitution.md](Constitution.md) (principles), [Spec.md](Spec.md) (semantics), [AST-Reference.md](AST-Reference.md), [Parser-Planning.md](Parser-Planning.md) (precedence), [Diagnostics.md](Diagnostics.md), [Builtins-Reference.md](Builtins-Reference.md), [Test-Corpus.md](Test-Corpus.md), [UX.md](UX.md). Implementation plan + per-slice specs: [Development-Slices.md](Development-Slices.md) → [slices/](slices/).
+Start with **[Design.md](Design.md)** — architecture overview + the full document map. Key references: [Constitution.md](Constitution.md) (principles), [Spec.md](Spec.md) (semantics), [AST-Reference.md](AST-Reference.md), [Parser-Planning.md](Parser-Planning.md) (precedence), [Diagnostics.md](Diagnostics.md), [Builtins-Reference.md](Builtins-Reference.md), [Test-Corpus.md](Test-Corpus.md), [UX.md](UX.md). Implementation plan + per-slice specs: [Development-Slices.md](Development-Slices.md) → [slices/](slices/). Real-world test findings & follow-ups: [Real-World-Validation.md](Real-World-Validation.md).
 
 **ScadBundler Live** (web companion — live at <https://dano7.github.io/ScadCombiner/>): [live/](live/) — [Spec](live/Spec.md), [Design](live/Design.md), [Development-Slices](live/Development-Slices.md) → [slices/](live/slices/).

@@ -19,6 +19,7 @@ scadbundler bundle <input.scad> [options]
 - `--dry-run`: Show what would be done without writing output
 - `--verbose`: Detailed logging of inlined files and transformations
 - `--diff`: Show diff between input and bundled output
+- `--lint`: Report the static source checks OpenSCAD skips at parse time — unknown references (SB3005) and module/function redefinitions (SB3004). **Off by default**: these are static approximations of OpenSCAD's *evaluation-time* behavior (it reads an unknown name as `undef`, warning only if the expression is reached; it silently last-wins on redefinition), so they false-positive on real-world libraries — dead code, short-circuited reads, optional config variables (`is_undef(X) || !X`), last-wins overrides of a library module, and intra-library duplicate definitions. The collision is still resolved without the flag; `--lint` only surfaces the finding. See [Diagnostics.md](Diagnostics.md) SB3004/SB3005.
 
 ## Collision Strategies (`--on-collision`)
 
@@ -26,7 +27,7 @@ A **collision** is two structurally *different* top-level definitions of the sam
 
 | Strategy | Behavior | Matches OpenSCAD? |
 |---|---|---|
-| `auto` (default) | Origin-dependent: `include` collisions resolve last-wins with SB3003/SB3004 warnings; colliding `use`-imports stay namespaced (`<filestem>__name`, SB5004). | **Yes** — the correctness-preserving default. |
+| `auto` (default) | Origin-dependent: `include` collisions resolve last-wins (silently, matching OpenSCAD — a reassigned **variable** still warns SB3003; module/function redefinition is reported only under `--lint`, SB3004); colliding `use`-imports stay namespaced (`<filestem>__name`, SB5004). | **Yes** — the correctness-preserving default. |
 | `prefix` | Keep *every* colliding definition under a namespaced name; references are rewritten to the definition OpenSCAD's flat scope would have bound (earlier `include` copies survive as dead code, exactly as a shadowed definition does in OpenSCAD). | Yes (rendered geometry). |
 | `error` | A genuine collision fails the whole bundle: SB5006, no output, exit code 1. A publish/CI gate for users who want collisions fixed in the sources instead of resolved by the bundler. | n/a — refuses to choose. |
 | `keep-last` | Force flat-scope last-wins everywhere, including across `use`d libraries (which `auto` would keep isolated). | For `include`-origin names, yes; forcing it across `use` boundaries breaks library isolation. |
@@ -34,7 +35,7 @@ A **collision** is two structurally *different* top-level definitions of the sam
 
 ### Why `keep-first` exists
 
-OpenSCAD's native rule is **last**-wins: a later definition silently stomps an earlier one for the entire scope. Whether that is a feature (the deliberate-override pattern) or a bug (an accidental name clash between unrelated files) is authoring intent the bundler cannot infer. `auto` reproduces OpenSCAD faithfully and warns (SB3003/SB3004); `keep-first` is the repair tool for when those warnings reveal the clash was an *accident* and the **first** definition is the one the model was actually written against:
+OpenSCAD's native rule is **last**-wins: a later definition silently stomps an earlier one for the entire scope. Whether that is a feature (the deliberate-override pattern) or a bug (an accidental name clash between unrelated files) is authoring intent the bundler cannot infer. `auto` reproduces OpenSCAD faithfully (a reassigned variable warns SB3003; run with `--lint` to also surface module/function redefinitions, SB3004); `keep-first` is the repair tool for when those findings reveal the clash was an *accident* and the **first** definition is the one the model was actually written against:
 
 - **A later `include` stomps a name you depend on, and you can't edit or reorder the sources.** Typical shape: the root includes `myhelpers.scad`, then a vendored third-party library that happens to define a same-named helper. In the multi-file project the right fix is renaming — but the bundle is a build artifact for upload (Thingiverse/MakerWorld), and forking a vendored library to rename one function is a heavy fix for a publishing step. `--on-collision keep-first` pins the name to the definition that came first, without touching the sources.
 - **Version-skew diamonds.** Two libraries each vendor *their own copy* of a shared helper file at different versions. The copies are structurally different, so dedup (SB5005) cannot merge them, and last-wins binds every shared name to whichever library happened to be included **later** — possibly the older code. The colliding includes are transitive (inside libraries you don't control), so reordering them is not an option; instead, include the library carrying the newest copy first and bundle with `keep-first` to pin every shared helper to it. This is the same first-wins repair rule C linkers and most module systems apply to duplicate symbols.
