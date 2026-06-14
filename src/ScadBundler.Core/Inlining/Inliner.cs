@@ -404,6 +404,11 @@ public static class Inliner
             // symbol = the builtin itself, not one of the used file's own definitions).
             foreach (Candidate use in useItems)
             {
+                if (moduleOverrides.Count == 0 && functionOverrides.Count == 0)
+                {
+                    break;
+                }
+
                 foreach (AstNode node in AstNodes.DescendantsAndSelf(use.Node))
                 {
                     switch (node)
