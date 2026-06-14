@@ -442,12 +442,18 @@ public static class Inliner
         // redefinitions, last-wins) all collapse onto the surviving definition's freed name.
         private void FreeBuiltinName(List<Candidate> overrides)
         {
-            string newName = RenameDeclaration(overrides[^1], report: false);
-            for (int i = 0; i < overrides.Count - 1; i++)
+            // Only rename the override that actually survives collision resolution *and* still occupies
+            // the bare builtin name in the output. Do not rename (or re-add) dropped definitions.
+            Candidate? occupant = overrides.LastOrDefault(o => _winners.Contains(o.Node) && !_renames.ContainsKey(o.Node));
+            if (occupant is null)
             {
-                _renames[overrides[i].Node] = newName;
+                return; // already renamed away (e.g. --on-collision prefix) or not emitted
             }
 
+            string newName = RenameDeclaration(occupant, report: false);
+
+            // Regardless of which declaration the semantic model bound a reference to (last-wins by
+            // document order), redirect every reference that the model associated with any override.
             RedirectReferences(overrides, newName);
         }
 
