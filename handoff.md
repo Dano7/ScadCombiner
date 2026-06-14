@@ -6,25 +6,147 @@ You are picking up **ScadBundler**, an AST-based OpenSCAD file bundler (C# / .NE
 
 ## ▶ Next session — start here
 
-**Slice 7 (minifier & obfuscator) is done and green** (this session — see below). The OpenSCAD
-integration harness, the attribution work, the Customizer computed-params fix, and the last-wins position
-fix are all done too. Remaining post-v1 work, pick one:
+**TASK: resolve recursive / forward / mutual references inside anonymous `function` literals.**
+Branch off **`SB3005-sibling-include-scope`** (current branch; holds the SB3001 retirement + the SB3005
+island-resolution fix — see "Done this session (2026-06-13)"). This is the last real analyzer gap from
+the SB3005 work: it accounts for ~4 of the residual 72 SB3005 warnings when bundling BOSL2.
+
+When an anonymous `function` literal references a name *from inside its own body* that is a sibling
+binding of the enclosing `let`/`for`/comprehension group (including its own binding — recursion), the
+`SemanticAnalyzer` spuriously emits **SB3005 "Unknown function/variable"**. A function literal is a
+**closure** resolved lazily at call time, by which point the whole binding group exists; the analyzer
+resolves the body too early (while the group frame is only partially populated).
+
+### Confirmed repro
+
+`repro.scad`:
+```scad
+v = let(f = function(n) n <= 0 ? 0 : f(n - 1)) f(5);          // self-recursion
+g = let(a = function(x) b(x), b = function(x) a(x)) g;        // mutual recursion
+h = let(p = function(t) q(t) + 1, q = function(t) t * 2) p(3);// forward reference
+eager = let(w = w + 1) w;                                      // GUARD: must STILL warn
+cube(v);
+```
+`dotnet run --project src/ScadBundler -- bundle repro.scad --dry-run` → today wrongly warns
+`Unknown function 'f'`(1:38), `'b'`(2:25), `'q'`(3:25). After the fix lines 1–3 are gone and **line 4
+(`w`) must still warn** — an eager `let` initializer sees only the *prior* bindings, never its own
+(OpenSCAD agrees). The *outer* calls `f(5)`/`g`/`p(3)` already resolve (a local value binding satisfies a
+function call — see `IsLocal`); only the in-literal references are wrong. Real BOSL2 cases: `strip_left`
+(`gears.scad:3499`), `bcs` (`masks.scad:1524`), `binsearch_fn` (`drawing.scad:1030`), `randang`
+(`math.scad:1256`) — all `let(name = function(...) ... name(...))`.
+
+### Root cause
+
+`src/ScadBundler.Core/Semantics/SemanticAnalyzer.cs`, `ResolveBindings` resolves each binding **value
+first**, then adds the name — correct for eager initializers, wrong for closures. The `FunctionLiteral`
+case in `ResolveExpression` resolves the body immediately via `ResolveFunctionLiteral` while the group
+frame is incomplete; `IsLocal` then misses the name → SB3005. `ResolveBindings` backs every group
+(`ResolveBoundExpression`, `ResolveBoundBody`, the `For`/`Let`/`ForC` comprehension cases), so fixing it
+there fixes all forms. Ground truth: function literals are `FunctionType` closures over the defining
+`Context` (`C:\git\hub\openscad\src\core\Expression.cc` `FunctionDefinition::evaluate`).
+
+### Recommended fix — two-phase binding resolution (keeps the eager guard correct)
+
+Add a deferral stack field and defer function literals encountered while resolving a group until **after**
+all the group's names are in the frame:
+```csharp
+private readonly Stack<List<FunctionLiteral>> _deferredLiterals = new();
+
+private void ResolveBindings(IReadOnlyList<Binding> bindings)
+{
+    var deferred = new List<FunctionLiteral>();
+    _deferredLiterals.Push(deferred);
+    foreach (Binding binding in bindings)
+    {
+        ResolveExpression(binding.Value, comprehensionAllowed: false); // literals defer into `deferred`
+        _scopeChain[^1].Variables.Add(binding.Name);
+    }
+    _deferredLiterals.Pop();
+    foreach (FunctionLiteral literal in deferred) ResolveFunctionLiteral(literal); // now full group visible
+}
+```
+And in the `FunctionLiteral` case of `ResolveExpression`:
+```csharp
+case FunctionLiteral literal:
+    if (_deferredLiterals.Count > 0) _deferredLiterals.Peek().Add(literal); // closure: resolve later
+    else ResolveFunctionLiteral(literal);                                   // not in a group: unchanged
+    break;
+```
+Self-nesting is fine: deferred bodies resolve before the caller `PopFrame()`s (group frame still on top,
+fully populated); a nested `let` pushes its own deferral list; a literal nested deep in a value still
+defers (the `FunctionLiteral` case fires wherever it appears).
+
+**Low-risk / no output change:** local references resolve to `null` — never recorded in
+`_resolution`/`ReferencesTo`, never renamed. In-literal references to *top-level* symbols already
+resolved (merged scope is order-independent). The only delta is the absence of the spurious SB3005, so
+emitted bytes are unchanged and Tier-1 equivalence holds (integration differential should pass untouched).
+
+*Simpler fallback (not preferred):* pre-add all group names before resolving values — but that also makes
+eager self/forward refs resolve as local, so `let(w = w+1)` (repro line 4) stops warning. Two-phase keeps
+it correct.
+
+### Tests to add (`tests/ScadBundler.Core.Tests/Semantics/SemanticResolutionTests.cs`)
+
+Mirror `LetBoundFunctionLiteral_CalledAsFunction_IsLocal_NoUnknownWarning`. Positive (no
+`UnknownReference`; in-literal callee resolves to `null`): self-recursion, forward ref, mutual recursion,
+and a `for`/comprehension-bound closure (covers `ResolveBoundBody`). Negative guard (still exactly one
+`UnknownReference` for `w`): `bad = let (w = w + 1) w;`.
+
+### Verify
+
+`dotnet build` (0 warnings) → `dotnet test` (all green, integration included) → re-bundle BOSL2 and
+confirm `strip_left|bcs|binsearch_fn|randang` are gone (SB3005 ≈ 72 → ~68):
+`dotnet run --project src/ScadBundler -- bundle "C:\git\hub\ParametricCompoundPlanetary.scad" -p "C:\git\hub" --dry-run`.
+
+### Out of scope (these residual SB3005 are correct/expected — do NOT silence)
+
+`BOSL2_NO_STD_WARNING` (~62, BOSL2's intentional opt-in config var); genuine BOSL2 bugs OpenSCAD also
+warns about — `helical` (typo for `helical1/2`, `gears.scad:4687`), `tangents` (no such param,
+`beziers.scad:719`), `lcmlist` (nonexistent fn, `skin.scad:3016`). **Separate** (note, don't do here):
+`best_i` (C-style-`for` accumulator self-ref in the update clause, `skin.scad:3406`); and a *top-level*
+variable holding a function literal called as a function (not in BOSL2's residual — would need
+`ResolveFunctionCall` to fall back to the variable table, and unlike a local that *is* a renameable
+symbol, so check inliner fallout + add a test).
+
+---
+
+### Other post-v1 work (after the task above, or instead)
 
 1. Broader post-v1: WASM/JSON API + "ScadBundler Live", real-world golden masters (BOSL2/NopSCADlib/
    dotSCAD), emitter line-length wrapping. See §"Post-v1 work". The real-world golden masters now also
    exercise the attribution pass against genuine library license headers (BOSL2 is BSD-2-Clause,
    NopSCADlib GPL-3.0) — and can ride the differential harness for render equivalence (incl. the new
    `--minify`/`--obfuscate` profiles).
-2. ~~**Small focused follow-up:** [ForwardReferenceChecker.cs](src/ScadBundler.Core/Inlining/ForwardReferenceChecker.cs)
-   line coverage is ≈60% — bring it to the ≥95% bar.~~ **Done (2026-06-11):** the per-node-kind test
-   file (`a382611`) had already taken it to 100% line coverage; this session added 5 more dedicated
-   tests (`Unary`, stepped `Range`, plain `LetExpression`, `$`-var/`PI` exemption, non-assignment skip)
-   so [ForwardReferenceCheckerTests.cs](tests/ScadBundler.Core.Tests/Inlining/ForwardReferenceCheckerTests.cs)
-   reaches **100% line coverage on its own**, no longer leaning on incidental `Slice5BundleTests` coverage.
-3. **Deferred Slice-7 extensions** ([Slice-7 §12](docs/slices/Slice-7-Minify-Obfuscate.md)): conservative
+2. **Deferred Slice-7 extensions** ([Slice-7 §12](docs/slices/Slice-7-Minify-Obfuscate.md)): conservative
    constant folding + control-flow rewriting (loop unroll, `if`↔`?:`) — each gated by a per-shape
    differential fixture before shipping (SB5010 surfaces a guarded skip); plus the obfuscation knobs
    (`--obfuscate-strength`/`-style`, a `--stable-names` escape hatch).
+
+### Done this session (2026-06-13) — parser/analyzer fixes for real-world BOSL2 bundling (web)
+
+Triggered by testing the web version against `C:\git\hub\ParametricCompoundPlanetary.scad` (`include
+<BOSL2/std.scad>` + `<BOSL2/gears.scad>`). Two issues, both fixed; **800 tests green, 0 warnings**
+(Core 698, CLI 23, Web 45, Integration 34). On branch **`SB3005-sibling-include-scope`**.
+
+1. **Retired SB3001 (invalid member access).** OpenSCAD never validates `.member` at compile time —
+   grammar is `call '.' TOK_ID` for any identifier (`parser.y:513`) and `MemberLookup::evaluate`
+   resolves at runtime (vectors `.x/.y/.z`; ranges `.begin/.step/.end`; **objects** from
+   `textmetrics()`/`fontmetrics()` arbitrary members), an unmatched member → `undef`, never an error.
+   BOSL2's `spin.orient`, `angle.start`, `textmetrics(...).advance/.ascent/.descent` are all legitimate.
+   Removed the validation + code + corpus fixture (repurposed `S-001` → positive `member-access`);
+   updated `AST-Reference`/`Diagnostics`/`Test-Corpus`/`CLAUDE.md`. (Auto-checkpoint commit `28b54a4`.)
+2. **Fixed the SB3005 over-warning flood (10,085 → 72) — `include`/`use` scope by *island*.** OpenSCAD
+   `include` is a textual splice into the includer's one flat scope; we resolved each file against only
+   its own tiny include-closure, so `gears.scad` (includes nothing) couldn't see `std.scad`. Now in
+   `SemanticAnalyzer.cs`: `ComputeResolutionEntries` assigns every file an **island entry** (root for
+   `include`-reached files, the use-target for `use`-reached) and resolves it against that entry's env;
+   `BuildUsedScopes` makes a file's `Used` the **union of `use` edges across the island's include-closure**
+   (a `use` inside an `include`d file is hoisted into the includer — required, else the move to island
+   `Merged` would *drop* per-file uses the inliner relies on for namespacing); and `IsLocal` lets a local
+   value binding satisfy a function call (function-literal locals like `avg`). `_currentFile` still drives
+   PrivateConstants, so inliner side-tables are unchanged; the 3 new resolution tests + full suite + the
+   OpenSCAD differential harness all pass. Residual 72 = ~62 `BOSL2_NO_STD_WARNING` + genuine BOSL2 bugs +
+   the recursive-literal gap that is **the next task above**.
 
 ### Done this session (2026-06-11) — Slice 7: minifier & obfuscator (`Transforming/`)
 
@@ -245,7 +367,7 @@ truth verified at `C:\git\hub\openscad`.
   - **B — OpenSCAD-faithful search paths.** New [OpenScadEnvironment.cs](src/ScadBundler.Core/Loading/OpenScadEnvironment.cs) reconstructs OpenSCAD's `parser_init` order: absolutized `OPENSCADPATH` (empty→CWD) + the per-user library folder. Wired through `Bundler`/`BundleCommand`.
   - **C (`--qualify-all`)** remains scoped but unimplemented; **D (obfuscator)** is **done** as Slice 7
     (`--obfuscate`; see "Done this session (2026-06-11)" — its deterministic-id design correction is honored).
-- Branch is **`Claude_implementation`**. Last feature commits (2026-06-10, session 3): `fix(semantics): collect use'd private constants over the include closure` + `feat(tests): add OpenSCAD differential integration harness (V1–V3)`.
+- Branch is **`SB3005-sibling-include-scope`** (as of 2026-06-13 — see "Done this session (2026-06-13)"; web slices W0–W3 and the SB3001/SB3005 analyzer fixes landed after the session-3 snapshot below). Earlier feature work was on `Claude_implementation`.
 - **Projects:** `src/ScadBundler.Core` (the library), **`src/ScadBundler`** (the CLI, `PackAsTool` → `scadbundler`), `tests/ScadBundler.Core.Tests`, **`tests/ScadBundler.Cli.Tests`**, **`tests/ScadBundler.IntegrationTests`** (env-gated differential harness). All five are in `ScadBundler.sln`.
 - **Entry points:** `Bundler.Bundle(rootPath, options)` (disk + `OPENSCADPATH`) → `BundleResult` (runs the
   Slice-7 `Transformer` internally when `options.Hardening` ≠ `None`); `Emitter.Emit(scadFile, EmitOptions?)`

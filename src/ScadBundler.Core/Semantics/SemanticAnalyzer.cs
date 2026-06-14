@@ -8,15 +8,16 @@ namespace ScadBundler.Core.Semantics;
 /// <summary>
 /// Builds symbol tables and resolves every reference under OpenSCAD's scoping rules, producing the
 /// <see cref="ISemanticModel"/> the Slice 5 inliner consumes, plus semantic validation diagnostics
-/// (SB3001–SB3005). The analyzer <b>never throws</b> — every problem is a diagnostic.
+/// (SB3002–SB3005). The analyzer <b>never throws</b> — every problem is a diagnostic.
 /// </summary>
 /// <remarks>
 /// Two passes over the load graph: pass 1 records each file's top-level declarations (flagging
-/// within-scope duplicates, SB3003/SB3004); pass 2 walks each file in <i>its own</i> environment
-/// (own + <c>include</c>-merged declarations for lookups; own <c>use</c>d libraries for calls,
-/// last-<c>use</c>-wins), binding references to symbols and validating member access (SB3001),
-/// comprehension position (SB3002), and unknown references (SB3005). Scoping/lookup order mirrors
-/// <c>ScopeContext.cc</c>/<c>Context.cc</c>: own scope → built-ins → used libraries.
+/// within-scope duplicates, SB3003/SB3004); pass 2 walks each file in its <i>island entry</i>'s
+/// environment — the root for <c>include</c>-reached files (OpenSCAD splices <c>include</c>s into the
+/// includer's one flat scope, so a bare-<c>include</c>d helper sees its includer's sibling definitions),
+/// the use-target for <c>use</c>-reached ones — binding references to symbols and validating
+/// comprehension position (SB3002) and unknown references (SB3005). Scoping/lookup order mirrors
+/// <c>ScopeContext.cc</c>/<c>Context.cc</c>: own/included scope → built-ins → used libraries.
 /// </remarks>
 public sealed class SemanticAnalyzer
 {
@@ -34,6 +35,14 @@ public sealed class SemanticAnalyzer
 
     // Each file's include closure (itself + everything it transitively includes): its FileContext.
     private readonly Dictionary<SourceFile, HashSet<SourceFile>> _includeClosures = [];
+
+    // Resolution-scope islands. Each file resolves references against its island *entry*'s environment,
+    // not its own: OpenSCAD's `include` is a textual splice into the includer's one flat scope, so an
+    // `include`d helper (e.g. BOSL2's gears.scad, which itself `include`s nothing) must see the
+    // sibling-`include`d definitions its includer pulled in (std.scad's), not just its own. `use` starts
+    // a fresh island. `_environments` is keyed by entry source; `_resolutionEntry` maps file → entry.
+    private readonly Dictionary<SourceFile, FileEnvironment> _environments = [];
+    private readonly Dictionary<SourceFile, SourceFile> _resolutionEntry = [];
 
     // Mutable walk state (single-threaded; reset per file / construct).
     private readonly List<LocalFrame> _scopeChain = [];
@@ -82,8 +91,9 @@ public sealed class SemanticAnalyzer
         }
 
         BuildIncludeClosures(files);
+        ComputeResolutionEntries(files);
 
-        // Pass 2: reference resolution + validation, each file in its own environment.
+        // Pass 2: reference resolution + validation, each file in its island entry's environment.
         foreach (LoadedFile file in files)
         {
             ResolveFile(file);
@@ -165,6 +175,48 @@ public sealed class SemanticAnalyzer
         }
     }
 
+    /// <summary>Assigns each file the environment it resolves references against, by island. An island is
+    /// an entry file plus everything it reaches through <c>include</c> edges; the entries are the root and
+    /// every <c>use</c>-target. OpenSCAD splices <c>include</c>d files into the includer's one flat scope,
+    /// so every file in an island resolves against that island entry's <c>include</c>-merged scope (a bare
+    /// <c>include</c>d helper thus sees its includer's sibling-<c>include</c>d definitions); <c>use</c> does
+    /// not export the includer's scope inward, so a used library forms its own island. Each file maps to the
+    /// first entry (root first) whose <c>include</c>-closure contains it.</summary>
+    private void ComputeResolutionEntries(IReadOnlyList<LoadedFile> files)
+    {
+        var entries = new List<LoadedFile> { _graph.Root };
+        var seen = new HashSet<SourceFile> { _graph.Root.Source };
+        foreach (LoadedFile file in files)
+        {
+            foreach (UseEdge edge in file.Uses)
+            {
+                if (edge.Target is LoadedFile target && !edge.FontPassthrough && seen.Add(target.Source))
+                {
+                    entries.Add(target);
+                }
+            }
+        }
+
+        FileEnvironment EnvFor(LoadedFile entry)
+        {
+            if (!_environments.TryGetValue(entry.Source, out FileEnvironment? env))
+            {
+                env = BuildEnvironment(entry);
+                _environments[entry.Source] = env;
+            }
+
+            return env;
+        }
+
+        foreach (LoadedFile file in files)
+        {
+            LoadedFile entry =
+                entries.FirstOrDefault(e => _includeClosures[e.Source].Contains(file.Source)) ?? file;
+            EnvFor(entry); // also caches the defensive `?? file` orphan case (e.g. single-file Analyze)
+            _resolutionEntry[file.Source] = entry.Source;
+        }
+    }
+
     // Closures exist for every file before pass 2 starts; indexing asserts that invariant.
     private bool IsInCurrentFileContext(SourceFile declaringFile) =>
         _includeClosures[_currentFile].Contains(declaringFile);
@@ -234,8 +286,10 @@ public sealed class SemanticAnalyzer
 
     private void ResolveFile(LoadedFile file)
     {
+        // _currentFile stays the walked file (it drives PrivateConstants' file-context edges via
+        // IsInCurrentFileContext); _currentEnv is the file's island-entry scope (see ComputeResolutionEntries).
         _currentFile = file.Source;
-        _currentEnv = BuildEnvironment(file);
+        _currentEnv = _environments[_resolutionEntry[file.Source]];
         _scopeChain.Clear();
 
         foreach (Statement statement in file.Ast.Statements)
@@ -421,8 +475,11 @@ public sealed class SemanticAnalyzer
                 break;
 
             case MemberExpression member:
+                // Member validity is a runtime concern in OpenSCAD (vectors expose .x/.y/.z, ranges
+                // .begin/.step/.end, objects from textmetrics()/fontmetrics() arbitrary members);
+                // the grammar accepts any `.ident` and an unmatched member yields `undef`, never a
+                // compile-time error. We can't know the target's type statically, so we don't judge.
                 ResolveExpression(member.Target, comprehensionAllowed: false);
-                ValidateMember(member);
                 break;
 
             case FunctionCallExpression call:
@@ -669,6 +726,14 @@ public sealed class SemanticAnalyzer
             {
                 return true;
             }
+
+            // A local value binding (parameter / let / for / comprehension) can hold a function
+            // literal and be invoked as `name(args)`, so a Function-kind lookup also matches a local
+            // variable. Values cannot be instantiated as modules, so Module lookups do not.
+            if (kind == Kind.Function && frame.Variables.Contains(name))
+            {
+                return true;
+            }
         }
 
         return false;
@@ -740,23 +805,6 @@ public sealed class SemanticAnalyzer
         }
     }
 
-    private void ValidateMember(MemberExpression member)
-    {
-        if (member.Member.Length == 0 || member.Member is "x" or "y" or "z")
-        {
-            return; // valid component, or an empty name from parser recovery (already diagnosed)
-        }
-
-        // Point at the member name itself (after the dot), not the whole access expression.
-        SourcePosition end = member.Span.End;
-        var start = new SourcePosition(
-            end.Offset - member.Member.Length, end.Line, end.Column - member.Member.Length);
-        _diagnostics.Error(
-            DiagnosticCode.InvalidMemberAccess,
-            $"Invalid member '.{member.Member}'; only .x, .y, and .z are valid vector components.",
-            new SourceSpan(member.Span.File, start, end));
-    }
-
     private void GuardComprehension(string keyword, bool comprehensionAllowed, SourceSpan span)
     {
         if (!comprehensionAllowed)
@@ -782,32 +830,79 @@ public sealed class SemanticAnalyzer
     // Environments & completeness
     // ---------------------------------------------------------------------------------------------
 
-    private static FileEnvironment BuildEnvironment(LoadedFile file)
-    {
-        var used = new List<FileScope>();
-        foreach (UseEdge edge in file.Uses)
+    private static FileEnvironment BuildEnvironment(LoadedFile entry) =>
+        new()
         {
-            if (edge.Target is not null && !edge.FontPassthrough)
+            Merged = BuildMergedScope(entry),
+            Used = BuildUsedScopes(entry),
+            Complete = IsComplete(entry),
+        };
+
+    /// <summary>Collects the <c>use</c>-imported scopes visible across an island (the entry plus
+    /// everything it reaches through <c>include</c>). OpenSCAD splices an <c>include</c>d file into the
+    /// includer at parse time, so a <c>use</c> statement inside an <c>include</c>d file is hoisted into the
+    /// includer's scope — every <c>use</c> in the island contributes. A used library exposes its whole
+    /// own <c>include</c>-merged scope (<c>FileContext::lookup_local_module</c> reads <c>usedmod->scope</c>)
+    /// but NOT transitively over its own <c>use</c>s (<see cref="BuildMergedScope"/> follows only
+    /// <c>include</c> edges), matching the set the inliner imports (<c>Inliner.GatherUseImports</c>). The
+    /// result is ordered last-<c>use</c>-first (most recent consulted first) and deduplicated by target.</summary>
+    private static List<FileScope> BuildUsedScopes(LoadedFile entry)
+    {
+        var ordered = new List<LoadedFile>(); // use targets in document-splice order
+        var onStack = new HashSet<SourceFile>();
+
+        void Walk(LoadedFile file)
+        {
+            if (!onStack.Add(file.Source))
             {
-                // A `use`d library exposes its whole `include`-merged scope: OpenSCAD splices an
-                // `include`d file's definitions into the including file's scope at parse time, so
-                // `use <lib>` sees what `lib` itself `include`s (FileContext::lookup_local_module reads
-                // `usedmod->scope`). It is NOT transitive over `use` — `BuildMergedScope` follows only
-                // `include` edges, never the used file's own `use`s — and it matches the set the inliner
-                // imports (Inliner.GatherUseImports walks the same include-closure).
-                used.Add(BuildMergedScope(edge.Target));
+                return; // include cycle guard
+            }
+
+            Dictionary<IncludeStatement, LoadedFile?> includeTargets = IncludeTargets(file);
+            Dictionary<UseStatement, LoadedFile?> useTargets = UseTargets(file);
+            foreach (Statement statement in file.Ast.Statements)
+            {
+                switch (statement)
+                {
+                    case IncludeStatement include
+                        when includeTargets.TryGetValue(include, out LoadedFile? included) && included is not null:
+                        Walk(included);
+                        break;
+                    case UseStatement use
+                        when useTargets.TryGetValue(use, out LoadedFile? used) && used is not null:
+                        ordered.Add(used);
+                        break;
+                }
+            }
+
+            onStack.Remove(file.Source);
+        }
+
+        Walk(entry);
+
+        // Last-`use`-wins: walk back-to-front, keeping the first (latest) occurrence of each target.
+        var scopes = new List<FileScope>();
+        var seen = new HashSet<SourceFile>();
+        for (int i = ordered.Count - 1; i >= 0; i--)
+        {
+            if (seen.Add(ordered[i].Source))
+            {
+                scopes.Add(BuildMergedScope(ordered[i]));
             }
         }
 
-        // Store last-`use`-first so the most recent `use` is consulted first (last-`use`-wins).
-        used.Reverse();
+        return scopes;
+    }
 
-        return new FileEnvironment
+    private static Dictionary<UseStatement, LoadedFile?> UseTargets(LoadedFile file)
+    {
+        var map = new Dictionary<UseStatement, LoadedFile?>(ReferenceEqualityComparer.Instance);
+        foreach (UseEdge edge in file.Uses)
         {
-            Merged = BuildMergedScope(file),
-            Used = used,
-            Complete = IsComplete(file),
-        };
+            map[edge.Statement] = edge.FontPassthrough ? null : edge.Target; // font `use` imports nothing
+        }
+
+        return map;
     }
 
     /// <summary>Builds the file's flat <c>include</c>-merged scope in OpenSCAD document order: each

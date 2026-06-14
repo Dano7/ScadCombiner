@@ -338,10 +338,10 @@ public sealed record ParenthesizedExpression(Expression Inner) : Expression;
 /// `Target[Index]`
 public sealed record IndexExpression(Expression Target, Expression Index) : Expression;
 
-/// `Target.Member` — Member is exactly one of "x", "y", "z" (sugar for [0]/[1]/[2]).
-/// Kept as `string` (not an enum) so the parser accepts any `.ident` and the
-/// semantic pass emits a precise, recoverable diagnostic SB3001 for anything
-/// outside {x, y, z}. See §15.11.
+/// `Target.Member` — any member name. Kept as `string` (not an enum) so the parser
+/// accepts any `.ident`. Validity is a runtime concern (vectors: .x/.y/.z; ranges:
+/// .begin/.step/.end; objects: arbitrary members) and is never validated statically.
+/// See §15.11.
 public sealed record MemberExpression(Expression Target, string Member) : Expression;
 
 /// `Callee(Arguments)`. Callee is usually an Identifier, but may be any
@@ -778,7 +778,7 @@ These choices are fixed for cross-implementation consistency (one of the AI-comp
 8. **`Binding` vs `AssignmentStatement` are distinct types** despite identical shape, because they occupy different grammatical positions (let/for binding vs. statement) and visitors/analyzers treat them differently.
 9. **Numbers are `double`.** OpenSCAD has no integer type — every number is an IEEE-754 double — so `double` reproduces its exact arithmetic and precision limits. The lexer accepts hex (`0xFF`), decimal, fraction (`.5`, `1.`), and scientific (`1e3`) forms; all parse to `double`, and very large values lose precision exactly as OpenSCAD warns. Emit fidelity (`1` vs `1.0` vs `1e3` vs `0xFF`) comes from `RawText`, not the numeric type.
 10. **Deprecated constructs are handled, not ignored ("No Half Measures").** Pure syntax/scope deprecations with exact modern equivalents are auto-normalized with a warning (`assign`→`let`; `child()`→`children(0)`; `child(n)`→`children(n)`). Deprecated *built-in calls* whose rewrite could alter geometry or file I/O (`import_stl`, `import_dxf`, `import_off`, `dxf_linear_extrude`, `dxf_rotate_extrude`) are preserved verbatim with an info diagnostic — the bundler combines, it does not refactor behavior. Full policy in [Spec.md](Spec.md); codes in [Diagnostics.md](Diagnostics.md).
-11. **Member access is validated, not enum-typed.** `MemberExpression.Member` stays `string` so the parser accepts any `.ident` and the semantic pass emits a precise, recoverable diagnostic (SB3001) for anything outside {x, y, z} — better UX than a hard parse failure.
+11. **Member access is accepted, not enum-typed or validated.** `MemberExpression.Member` stays `string` so the parser accepts any `.ident`. OpenSCAD resolves member validity at runtime — vectors expose `.x/.y/.z` (and `.w/.r/.g/.b/.a`/swizzles under the experimental feature), ranges `.begin/.step/.end`, and objects (`textmetrics()`/`fontmetrics()`) arbitrary members; an unmatched member yields `undef`, never a compile-time error. Since the bundler cannot know a value's runtime type, it performs no static member validation (the former SB3001 was retired).
 
 ---
 
@@ -793,7 +793,7 @@ All six former open questions are now **resolved** (see the linked sections for 
 | 3 | `assign` (and `child`) | Fully supported & normalized: `assign`→`let` (SB5001), `child()`→`children(0)` / `child(n)`→`children(n)` (SB5002). | §5, [Spec.md], [Diagnostics.md] |
 | 4 | `use` semantics | Specified precisely; bundler preserves used-file private constants, drops top-level geometry/vars. | [Spec.md] |
 | 5 | Number representation | `double` — OpenSCAD has no integer type; `RawText` preserves emit form. Closed. | §15.9 |
-| 6 | Member access surface | Set is exactly {x, y, z}; `Member` stays `string` + semantic validation (SB3001). | §6, §15.11 |
+| 6 | Member access surface | Any `.ident` accepted; `Member` stays `string`, validity is runtime-only, no static validation (SB3001 retired). | §6, §15.11 |
 
 ### Required verification (integration tests vs. official OpenSCAD — test-only harness)
 

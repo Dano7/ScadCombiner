@@ -1,4 +1,5 @@
 using ScadBundler.Core.Ast;
+using ScadBundler.Core.Diagnostics;
 using ScadBundler.Core.Semantics;
 using ScadBundler.Core.Tests.TestSupport;
 using Xunit;
@@ -46,6 +47,20 @@ public sealed class SemanticResolutionTests
         var bodyRead = (Identifier)let.Body;
 
         Assert.Null(result.Model.Resolve(bodyRead));
+    }
+
+    [Fact]
+    public void LetBoundFunctionLiteral_CalledAsFunction_IsLocal_NoUnknownWarning()
+    {
+        // A value binding (let/parameter/for) can hold a function literal and be invoked as `name(args)`,
+        // so the call resolves as a local (null = unrenameable), not an unknown function — BOSL2's
+        // `let(avg = function (a, b) ...) avg(x, y)` pattern.
+        var (ast, result) = SemanticHelper.AnalyzeFile("v = let (avg = function (a, b) (a + b) / 2) avg(1, 2);");
+        var let = (LetExpression)((AssignmentStatement)ast.Statements[0]).Value;
+        var call = (FunctionCallExpression)let.Body;
+
+        Assert.Null(result.Model.Resolve(call.Callee)); // bound locally
+        Assert.DoesNotContain(result.Diagnostics, d => d.Code == DiagnosticCode.UnknownReference);
     }
 
     [Fact]

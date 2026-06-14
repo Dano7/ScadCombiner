@@ -54,11 +54,7 @@ Full detail in [slices/Slice-2-Parser.md](slices/Slice-2-Parser.md) §10. The pa
 | SB2006 | Error | malformed parameter list | `Invalid parameter list.` |
 | SB2007 | Error | malformed argument list | `Invalid argument list.` |
 
-### SB3001 — Invalid vector member access *(Error, Semantic)*
-A `MemberExpression` uses a component outside `{x, y, z}`.
-- **Trigger**: `v.w`, `v.foo`, etc.
-- **Message**: `Invalid member '.{name}'; only .x, .y, and .z are valid vector components.`
-- **Notes**: Kept as a semantic error (not a parse error) so the message can point precisely at the offending member and recovery can continue. See [AST-Reference.md](AST-Reference.md) §6 / §15.11.
+> **SB3001 — retired.** Formerly "invalid vector member access". OpenSCAD never validates `.member` at compile time: the grammar accepts `call '.' TOK_ID` for any identifier, and `MemberLookup::evaluate` resolves it at runtime — vectors expose `.x/.y/.z` (plus `.w/.r/.g/.b/.a` and swizzles under the experimental feature), ranges `.begin/.step/.end`, and **objects** (from `textmetrics()`/`fontmetrics()`) **arbitrary members**; an unmatched member yields `undef`, not an error. Because the bundler cannot know an expression's runtime type, the code was removed (the parser still accepts any `.ident`). See [AST-Reference.md](AST-Reference.md) §6 / §15.11.
 
 ### SB3002 — Comprehension generator outside vector *(Error, Semantic)*
 A list-comprehension generator (`for` / `if` / `let` / `each` in their comprehension forms) appears outside a `VectorExpression`.

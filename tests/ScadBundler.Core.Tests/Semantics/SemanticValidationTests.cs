@@ -8,32 +8,28 @@ using Xunit;
 namespace ScadBundler.Core.Tests.Semantics;
 
 /// <summary>
-/// The Slice-4 validation diagnostics: invalid member access (SB3001), comprehension generator
-/// outside a vector (SB3002), within-scope reassignment/redefinition (SB3003/SB3004), and the
-/// conservative unknown-reference warning (SB3005). Also covers the never-throws contract.
+/// The Slice-4 validation diagnostics: comprehension generator outside a vector (SB3002), within-scope
+/// reassignment/redefinition (SB3003/SB3004), and the conservative unknown-reference warning (SB3005).
+/// Also covers the never-throws contract.
 /// </summary>
 public sealed class SemanticValidationTests
 {
-    // ---- SB3001 — invalid vector member (S-001) ----
-
-    [Fact]
-    public void InvalidMember_Reports_SB3001()
-    {
-        SemanticResult result = SemanticHelper.Analyze("v = [1, 2, 3];\nbad = v.w;");
-        Diagnostic diagnostic = Assert.Single(result.Diagnostics, d => d.Code == DiagnosticCode.InvalidMemberAccess);
-        Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
-        Assert.Equal("Invalid member '.w'; only .x, .y, and .z are valid vector components.", diagnostic.Message);
-        Assert.Equal(2, diagnostic.Span.Start.Line);
-    }
+    // ---- Member access is never statically validated (S-001) ----
 
     [Theory]
-    [InlineData("x")]
-    [InlineData("y")]
-    [InlineData("z")]
-    public void ValidMember_NoDiagnostic(string component)
+    [InlineData("x")]      // vector component
+    [InlineData("z")]      // vector component
+    [InlineData("w")]      // experimental vector swizzle / undef — not an error
+    [InlineData("begin")]  // range member
+    [InlineData("end")]    // range member
+    [InlineData("advance")]// textmetrics() object member
+    [InlineData("orient")] // arbitrary object member
+    public void MemberAccess_AnyName_ProducesNoDiagnostic(string member)
     {
-        SemanticResult result = SemanticHelper.Analyze($"v = [1, 2, 3];\nok = v.{component};");
-        Assert.DoesNotContain(result.Diagnostics, d => d.Code == DiagnosticCode.InvalidMemberAccess);
+        // OpenSCAD accepts any `.ident`; member validity is resolved at runtime (vectors expose
+        // .x/.y/.z, ranges .begin/.step/.end, objects arbitrary members), never at compile time.
+        SemanticResult result = SemanticHelper.Analyze($"v = [1, 2, 3];\nok = v.{member};");
+        Assert.Empty(result.Diagnostics);
     }
 
     // ---- SB3002 — comprehension generator outside a vector (S-002) ----

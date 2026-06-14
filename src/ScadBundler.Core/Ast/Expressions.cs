@@ -136,7 +136,10 @@ public sealed record IndexExpression(Expression Target, Expression Index) : Expr
 
 /// <summary>
 /// <c>Target.Member</c>. <see cref="Member"/> is kept as a <c>string</c> so the parser accepts any
-/// <c>.ident</c>; the semantic pass validates it against <c>{x, y, z}</c> (SB3001).
+/// <c>.ident</c>. Member validity is a runtime concern in OpenSCAD — vectors expose <c>.x/.y/.z</c>,
+/// ranges <c>.begin/.step/.end</c>, and objects (<c>textmetrics</c>/<c>fontmetrics</c>) arbitrary
+/// members; an unmatched member yields <c>undef</c>, never a compile-time error — so it is not
+/// statically validated.
 /// </summary>
 /// <param name="Target">The accessed expression.</param>
 /// <param name="Member">The member name.</param>

@@ -228,10 +228,11 @@ public sealed class ProjectAnalyzerTests
     [Fact]
     public void SemanticProblems_AreProjected_WithSpanFields()
     {
-        // A reference to a vector member outside {x,y,z} is SB3001 (a semantic, non-missing problem).
-        ProjectAnalysis a = Analyze(null, new UploadedFile("main.scad", "v = [1,2,3];\nx = v.w;\ncube(1);"));
+        // A comprehension generator outside a vector is SB3002 (a semantic, non-missing problem).
+        // `[each … : 5]` parses cleanly to a RangeExpression whose Start is the generator.
+        ProjectAnalysis a = Analyze(null, new UploadedFile("main.scad", "v = [1,2,3];\nbad = [each v : 5];\ncube(1);"));
 
-        DiagnosticDto problem = Assert.Single(a.Diagnostics, d => d.Code == DiagnosticCode.InvalidMemberAccess);
+        DiagnosticDto problem = Assert.Single(a.Diagnostics, d => d.Code == DiagnosticCode.ComprehensionOutsideVector);
         Assert.Equal("/proj/main.scad", problem.File); // the root's path is its canonical virtual path
         Assert.True(problem.Line >= 1);
         Assert.True(problem.Column >= 1);

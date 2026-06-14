@@ -155,6 +155,48 @@ public sealed class SemanticCrossFileTests
     }
 
     [Fact]
+    public void Include_SiblingIncludedDefinition_IsVisibleToLaterInclude()
+    {
+        // OpenSCAD `include` splices every included file into the root's one flat scope, so a file
+        // included after another sees the earlier sibling's definitions even though it includes nothing
+        // itself — the BOSL2 `include <std.scad>` then `include <gears.scad>` pattern, where gears.scad
+        // freely calls std.scad's functions without including it.
+        var (graph, result) = SemanticHelper.AnalyzeGraph(
+            ("main.scad", "include <defs.scad>\ninclude <consumer.scad>"),
+            ("defs.scad", "function helper() = 1;"),
+            ("consumer.scad", "result = helper();"));
+        LoadedFile defs = graph.ByAbsolutePath["defs.scad"];
+        LoadedFile consumer = graph.ByAbsolutePath["consumer.scad"];
+        var call = (FunctionCallExpression)((AssignmentStatement)consumer.Ast.Statements[0]).Value;
+
+        Symbol? symbol = result.Model.Resolve(call.Callee);
+        Assert.NotNull(symbol);
+        Assert.Same(defs.Ast.Statements[0], symbol.Declaration); // binds to the sibling-included def
+        Assert.DoesNotContain(result.Diagnostics, d => d.Code == DiagnosticCode.UnknownReference);
+    }
+
+    [Fact]
+    public void Include_HoistsUseImports_AcrossTheIsland()
+    {
+        // A `use` inside an `include`d file is hoisted into the includer's flat scope (include is
+        // textual), so a sibling-included file resolves through it. Mirrors BOSL2's
+        // `color.scad: use <builtins.scad>` becoming visible to `attachments.scad`'s `_color()` once
+        // std.scad includes both.
+        var (graph, result) = SemanticHelper.AnalyzeGraph(
+            ("main.scad", "include <wrap.scad>\ninclude <other.scad>"),
+            ("wrap.scad", "use <prims.scad>"),
+            ("other.scad", "prim();"),
+            ("prims.scad", "module prim() cube(1);"));
+        LoadedFile prims = graph.ByAbsolutePath["prims.scad"];
+        var call = (ModuleInstantiation)graph.ByAbsolutePath["other.scad"].Ast.Statements[0];
+
+        Symbol? symbol = result.Model.Resolve(call);
+        Assert.NotNull(symbol);
+        Assert.Same(prims.Ast.Statements[0], symbol.Declaration);
+        Assert.DoesNotContain(result.Diagnostics, d => d.Code == DiagnosticCode.UnknownReference);
+    }
+
+    [Fact]
     public void Include_MergedVariable_IsVisible()
     {
         var (graph, result) = SemanticHelper.AnalyzeGraph(

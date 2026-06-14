@@ -60,9 +60,9 @@ public static class DiagnosticCode
     public const string InvalidArgumentList = "SB2007";
 
     // Semantic analysis (SB3xxx)
-
-    /// <summary>A vector member access names a component outside <c>{x, y, z}</c>.</summary>
-    public const string InvalidMemberAccess = "SB3001";
+    // SB3001 (invalid member access) was retired: OpenSCAD never validates `.member` at compile time
+    // — vectors expose .x/.y/.z, ranges .begin/.step/.end, and objects (textmetrics/fontmetrics)
+    // arbitrary members; an unmatched member yields `undef` at runtime, not a static error.
 
     /// <summary>A list-comprehension generator appears outside a <see cref="Ast.VectorExpression"/>.</summary>
     public const string ComprehensionOutsideVector = "SB3002";

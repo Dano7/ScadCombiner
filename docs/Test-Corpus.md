@@ -49,7 +49,7 @@ tests/
 
 ## 3. Naming Convention
 
-`<slice-prefix>-<NNN>[-slug]` — e.g. `B-002-use-defs-only`, `S-001-member-invalid`.
+`<slice-prefix>-<NNN>[-slug]` — e.g. `B-002-use-defs-only`, `S-001-member-access`.
 
 | Prefix | Category |
 |---|---|
@@ -306,15 +306,16 @@ q → AssertExpression { Arguments=[ Argument { Value=(n > 0) } ], Body=null }
 
 ### Slice 4 — Semantic (`S-`)
 
-**S-001 — invalid vector member** *(proves SB3001)*
+**S-001 — member access is accepted** *(proves member access is never statically validated)*
 ```scad
 v = [1, 2, 3];
-bad = v.w;
+comp = v.x;        // vector component
+swizzle = v.w;     // experimental swizzle / undef — not an error
+r = [0:1:10];
+range_member = r.begin;  // range member
+metrics = v.advance;     // arbitrary object member (textmetrics/fontmetrics)
 ```
-```
-SB3001 ERROR 2:9 Invalid member '.w'; only .x, .y, and .z are valid vector components.
-```
-Companion positive (no diagnostics): `ok = v.x;` → `expected.diag` absent.
+No diagnostics (`expected.diag` absent). OpenSCAD's grammar accepts `call '.' TOK_ID` for any identifier and resolves member validity at runtime; an unmatched member yields `undef`, never a compile-time error. (Formerly proved the retired SB3001.)
 
 **S-002 — comprehension generator outside a vector** *(proves SB3002)*
 ```scad
@@ -505,7 +506,7 @@ Each locked decision maps to at least one binding case and, where behavioral, an
 | `assign`→`let` (Spec, Diag SB5001) | B-003 | V3 |
 | `child()`→`children(0)`, `child(n)`→`children(n)` (Diag SB5002) | B-004 | V1 |
 | deprecated built-ins preserved (Diag SB5003) | B-005 | — |
-| member ∈ {x,y,z} (AST §15.11, Diag SB3001) | S-001 | — |
+| member access accepted, not validated (AST §15.11) | S-001 | — |
 | comprehension only in vectors (AST §7, Diag SB3002) | S-002 | — |
 | modifier stacking as list (AST §5) | P-001 | — |
 | blank-line via `BlankLineBefore` (AST §15.7) | P-003 | — |
