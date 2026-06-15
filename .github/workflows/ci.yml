@@ -1,0 +1,176 @@
+name: CI
+
+# Continuous integration for ScadBundler: builds the whole solution (warnings are errors),
+# runs the unit/component tests on Linux + Windows, runs the OpenSCAD differential integration
+# tests against the official binary, and verifies the CLI packs as a dotnet tool.
+# Deployment of the web app lives in deploy-pages.yml (push-to-main only).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# One CI run per branch/PR; cancel superseded runs so pushes don't pile up.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Build + unit/component tests on both Linux and Windows.
+  # TreatWarningsAsErrors + EnforceCodeStyleInBuild (Directory.Build.props) mean a clean
+  # build already enforces the "no warnings" constitution rule. Integration tests are
+  # skipped here (no OpenSCAD binary); they have their own job below.
+  # ---------------------------------------------------------------------------
+  build-test:
+    name: Build & test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    env:
+      DOTNET_NOLOGO: 'true'
+      DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
+      # Skip the OpenSCAD differential tests here; the binary isn't installed on this runner.
+      SCADBUNDLER_SKIP_INTEGRATION: '1'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      # The solution includes a Blazor WebAssembly app; the wasm-tools workload guarantees it
+      # builds the same way it does for the Pages publish.
+      - name: Install wasm-tools workload
+        run: dotnet workload install wasm-tools
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', 'Directory.Build.props') }}
+          restore-keys: ${{ runner.os }}-nuget-
+
+      - name: Restore
+        run: dotnet restore ScadBundler.sln
+
+      - name: Build (Release, warnings as errors)
+        run: dotnet build ScadBundler.sln -c Release --no-restore
+
+      - name: Test (+ coverage)
+        run: >
+          dotnet test ScadBundler.sln -c Release --no-build
+          --collect:"XPlat Code Coverage"
+          --results-directory TestResults
+          --logger "trx;LogFileName=test-results.trx"
+
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ matrix.os }}
+          path: '**/TestResults/**/coverage.cobertura.xml'
+          if-no-files-found: warn
+
+  # ---------------------------------------------------------------------------
+  # OpenSCAD differential integration tests. Installs the official binary (apt ships 2021.01,
+  # the version the harness is verified against) and runs the IntegrationTests project. CSG export
+  # (-o file.csg) needs no GPU, but we run under xvfb so any display init OpenSCAD attempts succeeds.
+  # Tests that additionally need the local OpenSCAD source checkout or a real-projects directory
+  # self-skip (those env vars aren't set here); the binary-only differential tests do run.
+  # ---------------------------------------------------------------------------
+  integration:
+    name: Integration (OpenSCAD differential)
+    runs-on: ubuntu-latest
+    env:
+      DOTNET_NOLOGO: 'true'
+      DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
+      OPENSCAD_EXE: /usr/bin/openscad
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Install OpenSCAD + Xvfb
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends openscad xvfb
+          openscad --version
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', 'Directory.Build.props') }}
+          restore-keys: ${{ runner.os }}-nuget-
+
+      - name: Run integration tests
+        run: >
+          xvfb-run -a dotnet test
+          tests/ScadBundler.IntegrationTests/ScadBundler.IntegrationTests.csproj
+          -c Release --logger "trx;LogFileName=integration-results.trx"
+
+  # ---------------------------------------------------------------------------
+  # Verify the CLI still packs as a dotnet global tool, and keep the .nupkg as an artifact.
+  # ---------------------------------------------------------------------------
+  pack:
+    name: Pack dotnet tool
+    runs-on: ubuntu-latest
+    env:
+      DOTNET_NOLOGO: 'true'
+      DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', 'Directory.Build.props') }}
+          restore-keys: ${{ runner.os }}-nuget-
+
+      - name: Pack
+        run: dotnet pack src/ScadBundler/ScadBundler.csproj -c Release -o artifacts
+
+      - name: Upload package
+        uses: actions/upload-artifact@v4
+        with:
+          name: nupkg
+          path: artifacts/*.nupkg
+
+  # ---------------------------------------------------------------------------
+  # Single aggregate status to use as the branch-protection required check.
+  # ---------------------------------------------------------------------------
+  ci-success:
+    name: CI success
+    if: always()
+    needs: [build-test, integration, pack]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify all jobs succeeded
+        run: |
+          echo "build-test: ${{ needs.build-test.result }}"
+          echo "integration: ${{ needs.integration.result }}"
+          echo "pack: ${{ needs.pack.result }}"
+          [ "${{ needs.build-test.result }}" = "success" ] \
+            && [ "${{ needs.integration.result }}" = "success" ] \
+            && [ "${{ needs.pack.result }}" = "success" ]

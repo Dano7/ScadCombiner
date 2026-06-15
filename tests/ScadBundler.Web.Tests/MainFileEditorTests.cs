@@ -14,11 +14,19 @@ namespace ScadBundler.Web.Tests;
 public sealed class MainFileEditorTests : TestContext
 {
     [Fact]
-    public void EditingTextarea_ReanalyzesAfterDebounce()
+    public async Task EditingTextarea_ReanalyzesAfterDebounce()
     {
         var controller = new WorkspaceController();
         controller.AddOrReplace([new UploadedFile("main.scad", "cube(1);\n")]);
         Services.AddSingleton(controller);
+        var analysisUpdated = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        controller.Changed += () =>
+        {
+            if (controller.Analysis?.Missing.Any(m => m.RawPath == "extra.scad") == true)
+            {
+                analysisUpdated.TrySetResult();
+            }
+        };
 
         IRenderedComponent<MainFileEditor> cut = RenderComponent<MainFileEditor>(p => p
             .Add(c => c.Root, controller.Root)
@@ -28,11 +36,9 @@ public sealed class MainFileEditorTests : TestContext
         // Add a reference to a not-yet-uploaded library: after the debounce, analysis must report it missing.
         cut.Find("textarea").Input("include <extra.scad>\ncube(1);\n");
 
-        // Generous window: the debounce is a real timer, and this assembly may run alongside the CPU-heavy
-        // OpenSCAD integration suite — WaitForAssertion polls, so it returns as soon as the edit lands.
-        cut.WaitForAssertion(
-            () => Assert.Contains(controller.Analysis!.Missing, m => m.RawPath == "extra.scad"),
-            TimeSpan.FromSeconds(10));
+        // Generous window: the debounce is a real timer, and this assembly may run alongside other test work.
+        await analysisUpdated.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.Contains(controller.Analysis!.Missing, m => m.RawPath == "extra.scad");
     }
 
     [Fact]
