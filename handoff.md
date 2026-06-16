@@ -6,13 +6,40 @@ You are picking up **ScadBundler**, an AST-based OpenSCAD file bundler (C# / .NE
 
 ## ▶ Next session — start here
 
-**The recursive-`function`-literal task is DONE** (branch `recursive-anonymous-function-literal`), and so
-are two further real-world fixes found while differentially bundling
-`C:\git\hub\ParametricCompoundPlanetary.scad` (BOSL2) against the official binary — see **"Done this
-session (2026-06-14)"** below. The bundle of that file now renders **byte-identical CSG** to OpenSCAD's
-read of the original (zero stderr on both sides). No specific next task is queued; pick from "Other
-post-v1 work". Residual BOSL2 warnings that remain are intentional/expected (catalogued in the 06-14
-entry).
+**The compiler pipeline AND the distribution pipeline are both done.** This session (2026-06-16) added
+a tag-driven release pipeline — portable single-file binaries for all 6 platforms, `dotnet tool` via
+NuGet Trusted Publishing, winget, an unsigned MSIX — on **PR #19** (`feat/distribution-plan`). See
+"Done this session (2026-06-16)" below. (Earlier compiler work, incl. the recursive-`function`-literal
+task and the BOSL2 differential fixes, is in the 2026-06-14 entry and the collapsed brief below.)
+
+**Recommended next: finish the distribution rollout before building any new UI.** The pipeline is
+implemented and verified *locally*, but it has **not yet run on CI** — no dry run, no real tag.
+Shipping the first release and confirming the channels is higher-value and lower-risk than starting a
+GUI, and the Store/GUI work depends on the release plumbing anyway.
+
+1. **Validate & ship v0.2.0.** Merge PR #19, run the **Release** workflow as a dry run (Actions →
+   Release → Run workflow) to shake out the Windows-runner cross-compile matrix + MSIX on CI, fix
+   anything, then `git tag v0.2.0`. Owner account/secret setup is in the **uncommitted
+   `SETUP-CHECKLIST.md`** at the repo root (NuGet Trusted Publishing `NUGET_USER` var, winget
+   `WINGET_TOKEN`, Sponsors, Partner Center).
+2. **Small basics to harden while validating** (found during the dist work):
+   - winget id is `DanOlsen.ScadBundler` (Publisher.Package) — confirm the publisher moniker.
+   - MSIX ships placeholder "SB" logos and is unsigned (installs only via the Store, which signs it);
+     real branding + the Partner Center account are the blockers there.
+   - Confirm the `ScadBundler` NuGet id is free; the first Trusted-Publishing push of a brand-new id
+     may need one manual key push (noted in the checklist).
+   - Smoke-test a portable binary on a clean (no-.NET) VM before announcing.
+
+**Then — the GUI question (your call to make).** Recommendation: when the GUI is next, do the **Blazor
+*desktop* shell first** (Photino — reuses the existing `web/ScadBundler.Web` UI via a shared RCL,
+cross-platform incl. Linux, runs on full .NET so it's fast on big projects and reads `OPENSCADPATH`).
+It directly fixes the "web is slow for large codebases" complaint with maximum reuse, and it's the
+right thing to put in the **Microsoft Store** (a real app, not a CLI). The **native Windows GUI
+(WinUI 3)** stays backlog — a polished, Windows-only second UI to add *after* the cross-platform Blazor
+desktop proves the UX. Full rationale: [docs/Distribution.md](docs/Distribution.md).
+
+> The core engine (Slices 1–7) is mature and differential-verified — it needs no hardening pass. The
+> only genuinely unproven surface right now is **the release pipeline running on CI**, hence step 1.
 
 <details><summary>Original task brief (now completed) — kept for context</summary>
 
@@ -119,6 +146,38 @@ symbol, so check inliner fallout + add a test).
 </details>
 
 ---
+
+### Done this session (2026-06-16) — distribution & packaging pipeline (PR #19, branch `feat/distribution-plan`)
+
+Added a tag-driven release pipeline so non-.NET users (the maker audience) can get the tool, **with
+zero changes to `ScadBundler.Core`** — deployment concerns kept entirely at the edges. PR:
+<https://github.com/Dano7/ScadCombiner/pull/19>.
+
+- **`.github/workflows/release.yml`** — on a `vX.Y.Z` tag (or a manual dispatch = dry run), a single
+  `windows-latest` job cross-compiles **self-contained, single-file, trimmed** binaries for
+  win/osx/linux × x64/arm64, packs the `dotnet tool`, builds an unsigned MSIX, checksums everything,
+  creates a **GitHub Release**, pushes to **NuGet via Trusted Publishing** (OIDC: `NuGet/login@v1` +
+  `id-token: write`, gated on a `NUGET_USER` repo *variable* — no API-key secret), and opens a
+  **winget** PR (gated on `WINGET_TOKEN`). Manual dispatch builds + uploads artifacts but publishes
+  nothing (publish steps gated on `github.ref_type == 'tag'`).
+- **CLI csproj** — NuGet metadata + `PACKAGE.md` readme; **MinVer** (version from the git tag; the
+  hardcoded `0.1.0` is gone); `InvariantGlobalization`; a guarded `PortablePublish` property group
+  (self-contained single-file + trim, inert for normal build/test/pack). Added `global.json` (SDK
+  pin), `LICENSE` (MIT), `CHANGELOG.md`; `ci.yml` checkouts gained `fetch-depth: 0` for MinVer.
+- **`packaging/msix/`** — manifest + `build-msix.ps1` + placeholder logos. **Verified locally:** the
+  11 MB single-file win-x64 exe runs a real multi-file bundle correctly (include-flatten,
+  `use`-namespacing, license aggregation, diagnostics); `makeappx` builds a 5.9 MB MSIX. Native AOT was
+  tried and **rejected for v1** (no MSVC linker locally; needs per-OS toolchains) — single-file
+  cross-compiles from one runner and is the proven path; AOT stays a one-flag upgrade once CI-validated.
+- **Docs:** [Distribution.md](docs/Distribution.md), [Releasing.md](docs/Releasing.md),
+  [Install.md](docs/Install.md) (per-platform + SmartScreen "Run anyway" + a GitHub Sponsors appeal to
+  fund signing), README quick-start, `.github/FUNDING.yml`. Copilot's PR review (6 doc/reality
+  mismatches — runner platform, the non-existent `dry_run` input, winget/​chmod caveats) addressed and
+  threads resolved.
+- **Not yet validated:** the pipeline has **not run on CI** (no dry run, no tag). Owner setup is in the
+  uncommitted **`SETUP-CHECKLIST.md`** (repo root). Signing deferred (sponsor-funded); the Store signs
+  the MSIX. GUI roadmap: native Windows = backlog; Blazor web fills the GUI need; a Photino Blazor
+  desktop shell is the recommended first GUI step.
 
 ### Done this session (2026-06-14) — recursive `function` literals + two BOSL2 differential fixes (branch `recursive-anonymous-function-literal`)
 

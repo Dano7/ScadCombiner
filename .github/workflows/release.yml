@@ -2,7 +2,7 @@ name: Release
 
 # Tag-driven distribution. Push a version tag (vX.Y.Z) to build and publish every artifact:
 #   * portable, self-contained, single-file binaries for all 6 platforms (cross-compiled here),
-#   * the dotnet-tool .nupkg (pushed to NuGet when NUGET_API_KEY is set),
+#   * the dotnet-tool .nupkg (pushed to NuGet via Trusted Publishing when the NUGET_USER var is set),
 #   * an unsigned MSIX (preview),
 #   * a winget PR (when WINGET_TOKEN is set).
 # Run it manually (workflow_dispatch) from a branch to DRY RUN: it builds + uploads artifacts but
@@ -16,6 +16,7 @@ on:
 
 permissions:
   contents: write          # create the GitHub Release and upload assets
+  id-token: write          # OIDC token for NuGet Trusted Publishing (no API-key secret)
 
 concurrency:
   group: release-${{ github.ref }}
@@ -30,7 +31,6 @@ jobs:
     name: Build & publish
     runs-on: windows-latest
     env:
-      NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
       WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
     steps:
       - name: Checkout
@@ -125,17 +125,28 @@ jobs:
           generate_release_notes: true
           prerelease: ${{ contains(github.ref_name, '-') }}
 
+      # NuGet Trusted Publishing (OIDC) — no API-key secret. Needs `id-token: write` (above) plus a
+      # matching policy on nuget.org (account = the `NUGET_USER` repo variable, repo Dano7/ScadCombiner,
+      # workflow release.yml, package ScadBundler). NuGet/login exchanges the GitHub OIDC token for a
+      # short-lived key. Docs: https://learn.microsoft.com/nuget/nuget-org/trusted-publishing
+      - name: NuGet login (Trusted Publishing)
+        if: ${{ github.ref_type == 'tag' && vars.NUGET_USER != '' }}
+        id: nuget_login
+        continue-on-error: true     # a misconfigured policy must not fail the whole release
+        uses: NuGet/login@v1
+        with:
+          user: ${{ vars.NUGET_USER }}
       - name: Push to NuGet.org
-        if: ${{ github.ref_type == 'tag' && env.NUGET_API_KEY != '' }}
+        if: ${{ github.ref_type == 'tag' && steps.nuget_login.outputs.NUGET_API_KEY != '' }}
         shell: pwsh
-        run: dotnet nuget push dist/*.nupkg --api-key "$env:NUGET_API_KEY" --source https://api.nuget.org/v3/index.json --skip-duplicate
+        run: dotnet nuget push dist/*.nupkg --api-key "${{ steps.nuget_login.outputs.NUGET_API_KEY }}" --source https://api.nuget.org/v3/index.json --skip-duplicate
 
       # Gated on WINGET_TOKEN; verify the action ref/runner when you enable it (see docs/Releasing.md).
       - name: Submit to winget
         if: ${{ github.ref_type == 'tag' && env.WINGET_TOKEN != '' && !contains(github.ref_name, '-') }}
         uses: vedantmgoyal2009/winget-releaser@v2
         with:
-          identifier: ScadBundler
+          identifier: DanOlsen.ScadBundler   # winget requires Publisher.Package format
           version: ${{ steps.ver.outputs.version }}
           installers-regex: 'scadbundler-win-(x64|arm64)\.exe$'
           release-tag: ${{ github.ref_name }}

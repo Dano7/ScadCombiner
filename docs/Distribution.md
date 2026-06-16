@@ -73,7 +73,7 @@ release automation is in `release.yml`, separate from CI and the web deploy.
   self-contained, single-file, trimmed binaries for all six RIDs from a single Windows runner (which
   also builds the MSIX — `makeappx` is Windows-only), zips + checksums them, packs the `dotnet tool`,
   creates the **GitHub Release**, pushes to **NuGet**
-  (gated on `NUGET_API_KEY`), and submits the **winget** manifest (gated on `WINGET_TOKEN`).
+  (via **Trusted Publishing**, gated on the `NUGET_USER` variable), and submits the **winget** manifest (gated on `WINGET_TOKEN`).
 - **Docs:** [Install.md](Install.md) (per-platform, SmartScreen + sponsorship), [Releasing.md](Releasing.md);
   `.github/FUNDING.yml`.
 
@@ -131,15 +131,15 @@ Target: artifacts that need **no .NET install**.
 
 ## Publishing as a `dotnet tool`
 
-Maintainer steps (NuGet account, `NUGET_API_KEY`, pack/push — automated in `release.yml`) and the
-end-user `dotnet tool install --global ScadBundler` flow are documented in
+Maintainer steps (NuGet account, a Trusted-Publishing policy + `NUGET_USER` variable, pack/push —
+automated in `release.yml`) and the end-user `dotnet tool install --global ScadBundler` flow are documented in
 [Releasing.md](Releasing.md) and [Install.md](Install.md) respectively.
 
 ## Secrets & accounts
 
 | Item | For | When |
 | --- | --- | --- |
-| `NUGET_API_KEY` | `dotnet tool` publish | Phase 1 (you add the secret; the workflow is wired) |
+| NuGet Trusted Publishing (`NUGET_USER` variable + nuget.org policy) | `dotnet tool` publish | Phase 1 (OIDC; no API-key secret) |
 | `WINGET_TOKEN` | winget PRs | Phase 1 (optional) |
 | GitHub Sponsors | the signing appeal | Phase 1 (enable Sponsors; `FUNDING.yml` is in place) |
 | Partner Center (~$19) + Azure AD | Microsoft Store | Phase 2 |

@@ -17,7 +17,8 @@ That triggers [`.github/workflows/release.yml`](../.github/workflows/release.yml
    `win-x64`, `win-arm64`, `osx-x64`, `osx-arm64`, `linux-x64`, `linux-arm64` (cross-compiled from a
    single Windows runner — which also builds the MSIX, since `makeappx` is Windows-only), zips each
    with `LICENSE`, and writes `SHA256SUMS.txt`.
-2. **NuGet `dotnet tool`** — packs and (if `NUGET_API_KEY` is set) pushes to NuGet.org.
+2. **NuGet `dotnet tool`** — packs and (via **Trusted Publishing**, when the `NUGET_USER` repo
+   variable is set) pushes to NuGet.org.
 3. **GitHub Release** — creates the release for the tag and attaches the zips, the bare Windows
    `.exe`s, the checksums, and the `.nupkg`.
 4. **winget** — (if `WINGET_TOKEN` is set) opens a PR to `microsoft/winget-pkgs`.
@@ -31,22 +32,39 @@ the matrix and the MSIX step.
 
 ## One-time setup
 
-| Secret / account | Enables | How |
+| Setting | Enables | How |
 | --- | --- | --- |
-| `NUGET_API_KEY` (repo secret) | NuGet publish | nuget.org → API Keys → Push scope `ScadBundler` → add as a repo secret |
+| `NUGET_USER` (repo **variable**) | NuGet publish via Trusted Publishing | See below — OIDC, no API key |
 | `WINGET_TOKEN` (repo secret) | winget PRs | A classic PAT with `public_repo`, from an account that has forked `microsoft/winget-pkgs` |
 | GitHub Sponsors | the signing appeal in [Install.md](Install.md) | Enable Sponsors for the account; `.github/FUNDING.yml` is already in place |
 | Partner Center (~$19) | Microsoft Store | Reserve the **ScadBundler** name; then wire Store submission (see below) |
 
-Without `NUGET_API_KEY` / `WINGET_TOKEN`, those steps **skip cleanly** — the release and the
-portable binaries still publish. Nothing is published until you add the secrets.
+When these are unset, the matching steps **skip cleanly** — the GitHub Release and portable binaries
+still publish. Nothing goes to NuGet/winget/Store until you configure them.
+
+### NuGet — Trusted Publishing (OIDC, no API key)
+The workflow uses [Trusted Publishing](https://learn.microsoft.com/nuget/nuget-org/trusted-publishing):
+GitHub's OIDC token is swapped for a short-lived NuGet key at run time, so there is **no
+`NUGET_API_KEY` secret** to manage or leak.
+
+1. **On nuget.org** (signed in): *Account → Trusted Publishing → Add* a policy with
+   Package owner = your account, Package = `ScadBundler`, Repository owner = `Dano7`,
+   Repository = `ScadCombiner`, Workflow file = `release.yml`, Environment = *(blank)*.
+2. **On GitHub:** Settings → Secrets and variables → **Actions → Variables** → add variable
+   `NUGET_USER` = your nuget.org username. (A *variable*, not a secret — the username isn't sensitive.)
+3. Done — the workflow already has `permissions: id-token: write` and the `NuGet/login@v1` step.
+
+> **First publish of a brand-new id:** Trusted Publishing policies bind to an id you own/​reserve. If
+> nuget.org rejects the first OIDC push because the package doesn't exist yet, run `dotnet nuget push`
+> once with a temporary API key, then rely on Trusted Publishing for every release after.
 
 ## Pre-publish checklist (first release only)
 - Confirm the **`ScadBundler`** package id is free on [nuget.org](https://www.nuget.org/packages/ScadBundler)
   (the command name `scadbundler` is independent of the id). If taken, change `<PackageId>` in
   [`src/ScadBundler/ScadBundler.csproj`](../src/ScadBundler/ScadBundler.csproj).
 - First winget submission to `microsoft/winget-pkgs` goes through review; subsequent ones are
-  auto-bumped by the action.
+  auto-bumped by the action. winget ids must be `Publisher.Package` — the workflow uses
+  `DanOlsen.ScadBundler`; change the publisher moniker in `release.yml` if you prefer another.
 - Replace the placeholder MSIX assets in `packaging/msix/Images/` with real branding.
 
 ## MSIX & Microsoft Store (preview)
