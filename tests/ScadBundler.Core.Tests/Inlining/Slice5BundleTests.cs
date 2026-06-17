@@ -469,6 +469,65 @@ public sealed class Slice5BundleTests
     }
 
     [Fact]
+    public void RootParameters_MarkCustomizerCommentsSticky_SoTheySurviveHardening()
+    {
+        // The comments OpenSCAD's Customizer reads off each hoisted parameter — its /* [group] */ header,
+        // the description line directly above, and the trailing // [..] annotation — are marked sticky so
+        // they survive a comment-stripping emit (--minify/--obfuscate/--no-preserve-comments) and the
+        // bundle keeps the same grouping and labels. An ordinary header line above the parameter is not,
+        // so the long file headers still drop. (Licenses off here so the header stays on the parameter.)
+        var (bundled, _) = BundleHelper.Bundle(
+            BundleOptions.Default with { BundleLicenses = false },
+            ("main.scad",
+                "// long library header line\n"
+                + "/* [Sizes] */\n"
+                + "// Outer width of the box\n"
+                + "width = 10; // [1:100]\n"
+                + "cube(width);"));
+
+        var width = bundled.Statements.OfType<AssignmentStatement>().Single(a => a.Name == "width");
+        static bool Sticky(IEnumerable<Trivia> trivia, string text) =>
+            trivia.OfType<CommentTrivia>().Single(t => t.Text == text).Sticky;
+
+        Assert.True(Sticky(width.LeadingTrivia, "/* [Sizes] */"));               // group header
+        Assert.True(Sticky(width.LeadingTrivia, "// Outer width of the box"));    // description (line above)
+        Assert.True(Sticky(width.TrailingTrivia, "// [1:100]"));                  // inline annotation
+        Assert.False(Sticky(width.LeadingTrivia, "// long library header line")); // ordinary header — drops
+    }
+
+    [Fact]
+    public void CustomizerStickiness_IsPrecise_MatchesWhatOpenScadActuallyReads()
+    {
+        // Only what OpenSCAD's CommentParser/ParameterObject actually consume is kept; everything else
+        // drops under hardening (the "surgical" guarantee):
+        //  - a `//` description must be on the line *directly* above (getDescription reads firstLine-1);
+        //  - a trailing comment is kept only in a widget-constraining form (`[..]` or a bare number) —
+        //    a prose annotation parses but has no widget effect, so it is not carried;
+        //  - a group header must be a bracketed `/* [..] */` marker, not any single-line block.
+        var (bundled, _) = BundleHelper.Bundle(
+            BundleOptions.Default with { BundleLicenses = false },
+            ("main.scad",
+                "/* [Sizes] */\n"
+                + "// not adjacent\n"
+                + "\n"
+                + "width = 10; // millimeters\n"
+                + "/* ordinary block */\n"
+                + "height = 5; // 100\n"
+                + "cube([width, height, 1]);"));
+
+        var width = bundled.Statements.OfType<AssignmentStatement>().Single(a => a.Name == "width");
+        var height = bundled.Statements.OfType<AssignmentStatement>().Single(a => a.Name == "height");
+        static bool Sticky(IEnumerable<Trivia> trivia, string text) =>
+            trivia.OfType<CommentTrivia>().Single(t => t.Text == text).Sticky;
+
+        Assert.True(Sticky(width.LeadingTrivia, "/* [Sizes] */"));          // bracketed group marker
+        Assert.False(Sticky(width.LeadingTrivia, "// not adjacent"));        // blank line ⇒ not the description
+        Assert.False(Sticky(width.TrailingTrivia, "// millimeters"));        // prose ⇒ no widget effect, drops
+        Assert.False(Sticky(height.LeadingTrivia, "/* ordinary block */"));  // bracketless block ⇒ not a marker
+        Assert.True(Sticky(height.TrailingTrivia, "// 100"));               // bare-number annotation kept
+    }
+
+    [Fact]
     public void ComputedRootAssignment_IsNotHoisted_StaysAfterItsInputs()
     {
         // Regression (ForkedHolder): `spacing = lib_unit;` is not a Customizer parameter — OpenSCAD

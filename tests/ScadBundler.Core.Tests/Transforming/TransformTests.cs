@@ -81,6 +81,33 @@ public sealed class TransformTests
         Assert.Equal("\"hi\"", Assert.IsType<StringLiteral>(first.Value).RawText);
     }
 
+    [Theory]
+    [InlineData(HardeningProfile.Minify)]
+    [InlineData(HardeningProfile.Obfuscate)]
+    public void CustomizerComments_SurviveHardening_KeepingGroupsLabelsAndAnnotations(HardeningProfile profile)
+    {
+        // Regression: a hardened bundle must keep the comments OpenSCAD's Customizer reads — group
+        // headers, parameter descriptions, and inline annotations — so the bundled model's Customizer
+        // still groups and labels its knobs (identical functionality to the unbundled file). The long
+        // library header is not a Customizer comment and still drops (here via --strip-license).
+        ScadFile bundle = Harden(Options(profile) with { StripLicense = true },
+            ("main.scad",
+                "// Long library header line A\n"
+                + "// Long library header line B\n"
+                + "/* [Box] */\n"
+                + "// Outer width of the box\n"
+                + "width = 20; // [10:50]\n"
+                + "module box(w) { cube(w); }\n"
+                + "box(width);\n")).Bundle;
+        string text = Emitter.Emit(bundle, EmitFor(profile));
+
+        Assert.Contains("/* [Box] */", text, StringComparison.Ordinal);               // group header
+        Assert.Contains("// Outer width of the box", text, StringComparison.Ordinal);  // description
+        Assert.Contains("// [10:50]", text, StringComparison.Ordinal);                 // inline annotation
+        Assert.Equal("width", Assert.IsType<AssignmentStatement>(bundle.Statements[0]).Name); // name kept for the knob
+        Assert.DoesNotContain("Long library header line", text, StringComparison.Ordinal);     // header still dropped
+    }
+
     // ---------------------------------------------------------------------------------------------
     // Tree-shaking
     // ---------------------------------------------------------------------------------------------

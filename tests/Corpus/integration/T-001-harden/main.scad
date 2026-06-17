@@ -3,6 +3,10 @@
 // no new warnings (exercises: prologue params incl. a string, an echo'd string, an included private
 // constant, a namespaced `use` library, an unused/tree-shakeable module, and a dynamically-scoped
 // `$`-special-variable default that tree-shaking must NOT drop — see inc.scad).
+// Also exercises Customizer trivia (group marker, description, inline annotation) that must survive a
+// comment-stripping emit and still be valid OpenSCAD (the header above is hoisted away from the param).
+/* [Dimensions] */
+// Wall thickness in mm
 wall = 2;          // [1:5]
 size = 10;
 part_name = "widget";

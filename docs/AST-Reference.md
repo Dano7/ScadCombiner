@@ -529,7 +529,7 @@ public sealed record CustomizerParameter(
 );
 ```
 
-> The bundler MUST preserve all Customizer trivia by default (`--preserve-comments` is on by default per [UX.md](UX.md)). `--minify` is the only mode permitted to drop it.
+> The bundler MUST preserve all Customizer trivia. With comments preserved (the default) every comment is emitted; under a comment-stripping mode (`--minify`/`--obfuscate`/`--no-preserve-comments`) the comments the Customizer reads off each hoisted parameter — its `/* [Section] */` group header, its description line, and its inline `// [ ... ]` annotation — are marked sticky and survive (only ordinary comments and the long library headers drop), so the bundled model's Customizer is unchanged.
 
 ---
 

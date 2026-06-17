@@ -1,3 +1,4 @@
+using ScadBundler.Core;
 using ScadBundler.Core.Ast;
 using ScadBundler.Core.Diagnostics;
 using ScadBundler.Core.Emitting;
@@ -158,6 +159,33 @@ public sealed class EmitterTests
         string emitted = Emitter.Emit(ParseHelper.Parse(source).Root, new EmitOptions(PreserveComments: false));
         Assert.Equal("x = 1;\n", emitted);
     }
+
+    [Fact]
+    public void StickyTrailingComment_SurvivesStripping_OrdinaryOneDropped()
+    {
+        // The inliner marks a hoisted parameter's inline Customizer annotation sticky so it rides the
+        // minified line (mirroring sticky leading trivia); a non-sticky trailing comment still drops.
+        AssignmentStatement annotated = Assignment("width", new CommentTrivia("// [1:100]", CommentKind.Line)
+        {
+            Span = SourceSpan.Synthetic,
+            Sticky = true,
+        });
+        AssignmentStatement plain = Assignment("x", new CommentTrivia("// note", CommentKind.Line)
+        {
+            Span = SourceSpan.Synthetic,
+        });
+        var file = new ScadFile(SourceFile.Synthesized, [annotated, plain]);
+
+        Assert.Equal("width=10;  // [1:100]\nx=10;\n", Emitter.Emit(file, new EmitOptions(Minify: true)));
+        Assert.Equal("width = 10;  // [1:100]\nx = 10;\n", Emitter.Emit(file, new EmitOptions(PreserveComments: false)));
+    }
+
+    private static AssignmentStatement Assignment(string name, CommentTrivia trailing) =>
+        new(name, new NumberLiteral(10, "10") { Span = SourceSpan.Synthetic })
+        {
+            Span = SourceSpan.Synthetic,
+            TrailingTrivia = [trailing],
+        };
 
     // ---------------------------------------------------------------------------------------------
     // Configurable formatting (brace style, indent style/width, EOF trivia)

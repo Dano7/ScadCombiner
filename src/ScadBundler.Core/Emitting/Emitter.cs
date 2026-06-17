@@ -607,18 +607,16 @@ public sealed class Emitter
 
     private void EmitTrailingTrivia(AstNode node)
     {
-        if (Min || !_options.PreserveComments)
-        {
-            return;
-        }
-
+        bool stripping = Min || !_options.PreserveComments;
         foreach (Trivia trivia in node.TrailingTrivia)
         {
-            if (trivia is CommentTrivia comment)
+            if (trivia is not CommentTrivia comment || (stripping && !comment.Sticky))
             {
-                _builder.Append("  ");
-                _builder.Append(comment.Text);
+                continue; // stripping modes keep only sticky trivia (the Customizer parameter annotation)
             }
+
+            _builder.Append("  ");
+            _builder.Append(comment.Text);
         }
     }
 

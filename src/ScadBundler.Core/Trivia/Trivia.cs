@@ -27,10 +27,12 @@ public sealed record CommentTrivia(string Text, CommentKind Kind) : Trivia
 {
     /// <summary>
     /// When <c>true</c>, this comment survives the comment-stripping emit modes
-    /// (<c>--minify</c> / <c>--no-preserve-comments</c>) instead of being dropped. Set on the
-    /// aggregated license header and the synthesized Customizer <c>/* [Hidden] */</c> fence so a
-    /// hardened (minified/obfuscated) bundle keeps its legal header and its Customizer parameter
-    /// boundary. Ignored when comments are preserved (every comment is emitted then). Default <c>false</c>.
+    /// (<c>--minify</c> / <c>--no-preserve-comments</c> / <c>--obfuscate</c>) instead of being dropped.
+    /// Set on the aggregated license header, the synthesized Customizer <c>/* [Hidden] */</c> fence, and
+    /// the comments OpenSCAD's Customizer reads off each hoisted parameter (its <c>/* [group] */</c>
+    /// header, its description line, and its trailing <c>// [..]</c> annotation) so a hardened
+    /// (minified/obfuscated) bundle keeps its legal header and the same Customizer grouping and labels as
+    /// the original. Ignored when comments are preserved (every comment is emitted then). Default <c>false</c>.
     /// </summary>
     public bool Sticky { get; init; }
 }

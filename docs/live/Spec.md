@@ -293,8 +293,9 @@ public static class WebBundler
 
 **Option mapping (must mirror `BundleCommand`):** `Hardening` of `Minify` ⇒ `EmitOptions(Minify: true)`;
 `None` ⇒ `EmitOptions(PreserveComments: options.PreserveComments)`; `Obfuscate` ⇒ keep formatting but
-drop ordinary comments (`PreserveComments: false`) — the aggregated license + Customizer fence are sticky
-and survive regardless. `LibraryPaths` is empty (browser sandbox — no `OPENSCADPATH`). `Ok` gates `Text`:
+drop ordinary comments (`PreserveComments: false`) — the aggregated license, the Customizer fence, and
+the per-parameter Customizer comments (group header, description, inline annotation) are sticky and
+survive regardless. `LibraryPaths` is empty (browser sandbox — no `OPENSCADPATH`). `Ok` gates `Text`:
 when any diagnostic is `Error`, return `Text = ""` and `Ok = false` (the CLI's exit-1 behavior).
 
 ### 5.5 Diagnostic projection

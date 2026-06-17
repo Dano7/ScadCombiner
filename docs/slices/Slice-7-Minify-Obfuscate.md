@@ -71,7 +71,8 @@ This slice transforms only in the space that bar can *prove*:
 4. **Special-variable & dynamic-scope identity** — `$fn`, `$fa`, `$fs`, `$t`, `$children`, … are never
    renamed, aliased, or hoisted (dynamic scope; [ADR 0001](../adr/0001-include-use-scoping-and-namespacing.md) §3).
 5. **Customizer identity** — the set of parameters OpenSCAD's Customizer extracts, their names, groups,
-   and annotations, is unchanged (§7; rule mirrors `CommentParser::collectParameters`).
+   and annotations, is unchanged (names §7, group/description/annotation trivia §8; rule mirrors
+   `CommentParser::collectParameters`).
 
 ---
 
@@ -302,10 +303,14 @@ stays (it remains a knob).
   new AST `--minify` stage marks the aggregated-license trivia **non-strippable**, and the emitter honors
   that mark even under textual minify. (Recommended; flagged in §12 as the one behavior change to confirm.)
   A `--strip-license` opt-out is provided for users who own all sources.
-- **Customizer-structural trivia** (`/* [Group] */`, `// [min:max]`, the synthesized `/* [Hidden] */`)
-  is preserved by **both** profiles when comments are otherwise kept, because it drives the Customizer UI
-  (§2 invariant 5). Under explicit comment-stripping the Customizer grouping is lost — same caveat as today
-  ([Post-Demo-Plan.md](../Post-Demo-Plan.md) Item A "Risks").
+- **Customizer-structural trivia** (`/* [Group] */`, the description line, `// [min:max]`, and the
+  synthesized `/* [Hidden] */`) is preserved by **both** profiles, and **even under explicit
+  comment-stripping** (`--minify`/`--obfuscate`/`--no-preserve-comments`). The inliner marks exactly the
+  comments OpenSCAD's `CommentParser` reads off each hoisted parameter as sticky (its group header, the
+  description directly above, and the trailing annotation), and the emitter honors that mark — so the
+  Customizer grouping and labels are *not* lost under hardening (§2 invariant 5). Only ordinary comments
+  and the long library headers drop (the latter via `--strip-license`). This is the surgical alternative
+  to keeping all comments, which would re-bloat the bundle with the very headers hardening is meant to shed.
 
 ---
 

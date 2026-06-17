@@ -158,10 +158,14 @@ prologue node. This exemption is the hook Items C and D depend on.
 
 ### Risks / edge cases
 
-- **`--minify` / `--no-preserve-comments` drop all comments**, including the fence and the author's own
-  `/* [Section] */` — so Customizer grouping is *not* preserved in those modes (already true today for
-  author comments). Document: use default mode when the Customizer matters. A vNext option could mark
-  Customizer-structural comments non-strippable.
+- ~~**`--minify` / `--no-preserve-comments` drop all comments**, including the fence and the author's own
+  `/* [Section] */` — so Customizer grouping is *not* preserved in those modes.~~ ✅ **Fixed**: the inliner
+  now marks the comments OpenSCAD's Customizer reads off each hoisted parameter (its `/* [Section] */`
+  group header, the description line directly above, and the trailing `// [min:max]` annotation) as
+  **sticky**, and the emitter keeps sticky leading *and* trailing trivia under every comment-stripping mode
+  (`--minify`/`--obfuscate`/`--no-preserve-comments`). Customizer grouping and labels survive hardening;
+  only ordinary comments and the long library headers still drop (the latter via `--strip-license`). See
+  `Inliner.StickyCustomizerComments` and [slices/Slice-7-Minify-Obfuscate.md](slices/Slice-7-Minify-Obfuscate.md) §8.
 - **Brace-less code between params** (e.g. a bare `cube(10);` or `module m() cube(1);` mid-block):
   our rule stops the prologue at the first instantiation, which can be slightly *more* conservative
   than `getLineToStop` (which only stops at a literal `{`). Real parameter blocks are contiguous and

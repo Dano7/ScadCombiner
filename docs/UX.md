@@ -60,13 +60,18 @@ rationale in [slices/Slice-7-Minify-Obfuscate.md](slices/Slice-7-Minify-Obfuscat
   model's real knobs (`wall_thickness`, …) with their original names. Each parameter is then assigned to a
   generated alias *immediately* and that alias is used everywhere after, so the meaningful name appears
   exactly once. (`--minify` keeps each top-level statement on its own line so the line-based Customizer
-  extraction still works; comment-driven slider annotations like `// [1:20]` are dropped under hardening.)
+  extraction still works.)
+- **Customizer comments are kept.** The comments OpenSCAD's Customizer reads off each parameter — its
+  group header (`/* [Section] */`), its description line, and its inline slider/range annotation
+  (`// [1:20]`) — survive both profiles, so the bundled model's Customizer groups and labels its knobs
+  exactly like the unbundled file. Only these comments are kept; ordinary comments and the long library
+  headers still drop (the latter via `--strip-license`).
 - **Deterministic with avalanche.** Same input → byte-identical output (good for reproducible builds and
   goldens), yet a one-character source change reshuffles *every* generated name — so you can't diff two
   versions to learn what changed. Always on; there is no stable-name escape hatch.
 - **License preserved by default.** The aggregated license/attribution header survives both profiles (the
-  downloader still gets the legal text); per-section provenance banners and ordinary comments are dropped.
-  `--strip-license` opts out.
+  downloader still gets the legal text); per-section provenance banners and ordinary comments (those not
+  driving the Customizer) are dropped. `--strip-license` opts out.
 - **Mutually exclusive.** `--minify --obfuscate` together is a usage error (exit 2).
 
 ## Expected Behavior

@@ -147,9 +147,12 @@ internal sealed class Attribution
         return run;
     }
 
-    // A Customizer group marker: a single-line block comment whose content is exactly "[ ... ]"
-    // (e.g. "/* [Box] */" or the synthesized "/* [Hidden] */").
-    private static bool IsCustomizerGroupMarker(Trivia trivia)
+    /// <summary>A Customizer group marker: a single-line block comment whose content is exactly
+    /// <c>[ ... ]</c> (e.g. <c>/* [Box] */</c> or the synthesized <c>/* [Hidden] */</c>). Shared with the
+    /// inliner's sticky-trivia pass so both agree on what a group header is.</summary>
+    /// <param name="trivia">The trivia to test.</param>
+    /// <returns><c>true</c> when it is a Customizer group marker.</returns>
+    internal static bool IsCustomizerGroupMarker(Trivia trivia)
     {
         if (trivia is not CommentTrivia { Kind: CommentKind.Block } comment || comment.Text.Length < 4)
         {
