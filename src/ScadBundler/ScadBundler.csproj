@@ -54,7 +54,7 @@
 
   <ItemGroup>
     <!-- Git-tag versioning. Build-time only (PrivateAssets=all): not a runtime or package dependency. -->
-    <PackageReference Include="MinVer" Version="5.0.0" PrivateAssets="all" />
+    <PackageReference Include="MinVer" Version="7.0.0" PrivateAssets="all" />
   </ItemGroup>
 
   <ItemGroup>
