@@ -70,6 +70,14 @@ public enum HardeningProfile
 /// <c>undef</c>; redefinitions silently last-win), so they false-positive on dead code, short-circuited
 /// reads, optional config variables, and intra-library duplicates in real-world libraries (e.g. BOSL2).
 /// The collision is still resolved either way; <c>--lint</c> only controls whether it is reported.</param>
+/// <param name="ParametersFirst">When <c>true</c>, emit the aggregated license/header block <b>below</b>
+/// the Customizer parameter prologue (above the body) instead of above the parameters, so the parameters
+/// lead the file. An opt-in platform-compatibility workaround: Thingiverse's Customizer fails to surface
+/// parameters that follow a long leading comment block; promoting them above the header restores them.
+/// Comment-relocation only (the prologue is already hoisted and protected) — the rendered CSG is
+/// unchanged, and the license still appears, just lower. A no-op without an aggregated header to move
+/// (e.g. <c>--no-bundle-licenses</c>) or without a Customizer prologue. See
+/// <see href="../../docs/adr/0002-parameters-first-customizer-hoist.md">ADR 0002</see>.</param>
 public sealed record BundleOptions(
     IReadOnlyList<string> LibraryPaths,
     CollisionStrategy OnCollision = CollisionStrategy.Auto,
@@ -77,7 +85,8 @@ public sealed record BundleOptions(
     bool PreserveComments = true,
     HardeningProfile Hardening = HardeningProfile.None,
     bool StripLicense = false,
-    bool Lint = false)
+    bool Lint = false,
+    bool ParametersFirst = false)
 {
     /// <summary>Default options: no extra library paths, <see cref="CollisionStrategy.Auto"/>.</summary>
     public static BundleOptions Default { get; } = new([]);

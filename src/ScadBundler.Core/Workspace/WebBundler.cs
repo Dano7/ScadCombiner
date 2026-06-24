@@ -46,7 +46,8 @@ public static class WebBundler
             options.BundleLicenses,
             options.PreserveComments,
             hardening,
-            options.StripLicense);
+            options.StripLicense,
+            ParametersFirst: options.ParametersFirst);
 
         // Emit: minify collapses whitespace + drops non-sticky comments; obfuscate keeps formatting but
         // drops ordinary comments (the aggregated license + Customizer fence are sticky and survive both).

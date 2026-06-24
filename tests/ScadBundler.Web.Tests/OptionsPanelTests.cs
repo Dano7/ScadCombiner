@@ -23,10 +23,12 @@ public sealed class OptionsPanelTests : TestContext
     // the CPU-heavy integration suite (the W2 MainFileEditor timing note).
     private static readonly TimeSpan Settle = TimeSpan.FromSeconds(10);
 
-    // Checkbox document order: [0] remove-provenance, [1] strip-license, [2] keep-comments.
+    // Checkbox document order: [0] remove-provenance, [1] strip-license, [2] keep-comments,
+    // [3] parameters-first.
     private const int Provenance = 0;
     private const int StripLicense = 1;
     private const int KeepComments = 2;
+    private const int ParametersFirst = 3;
 
     // Radio document order: [0] Normal, [1] Minify, [2] Obfuscate.
     private const int Normal = 0;
@@ -133,6 +135,18 @@ public sealed class OptionsPanelTests : TestContext
         await controller.Recomputing;
 
         Assert.False(controller.Options.PreserveComments);
+    }
+
+    [Fact]
+    public async Task ParametersFirstCheckbox_TogglesParametersFirst()
+    {
+        (WorkspaceController controller, IRenderedComponent<OptionsPanel> cut) = await RenderAsync();
+        Assert.False(controller.Options.ParametersFirst); // default: header above the parameters
+
+        Checkbox(cut, ParametersFirst).Change(true);
+        await controller.Recomputing;
+
+        Assert.True(controller.Options.ParametersFirst);
     }
 
     [Fact]

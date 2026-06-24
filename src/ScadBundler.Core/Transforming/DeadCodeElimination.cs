@@ -92,11 +92,26 @@ internal sealed class DeadCodeElimination : IBundleTransform
 
         var kept = new List<Statement>(bundle.Statements.Count);
         int removed = 0;
+
+        // Sticky leading trivia rescued from dropped statements (the aggregated license header and the
+        // synthesized /* [Hidden] */ fence, both Sticky). Dropping their host statement must not drop
+        // them — carry them forward onto the next surviving statement so the license and the Customizer
+        // fence still lead the body (the --parameters-first relocation rides on a body statement, which
+        // is exactly the kind of node tree-shaking can remove).
+        var rescued = new List<Trivia>();
         foreach (Statement statement in bundle.Statements)
         {
             if (removable.Contains(statement) && !live.Contains(statement))
             {
                 removed++;
+                rescued.AddRange(statement.LeadingTrivia.Where(static t => t is CommentTrivia { Sticky: true }));
+                continue;
+            }
+
+            if (rescued.Count > 0)
+            {
+                kept.Add(statement with { LeadingTrivia = [.. rescued, .. statement.LeadingTrivia] });
+                rescued.Clear();
                 continue;
             }
 
@@ -106,6 +121,21 @@ internal sealed class DeadCodeElimination : IBundleTransform
         if (removed == 0)
         {
             return bundle;
+        }
+
+        // If every statement after the rescued trivia's host was also removed (e.g. a parameters-only
+        // bundle whose entire body tree-shakes away), no later statement caught it. Re-home the license
+        // atop the surviving statements so attribution is never silently dropped. The /* [Hidden] */
+        // fence is deliberately NOT re-homed: with no body global left it has nothing to hide, and
+        // placing it above the parameters would wrongly hide them from the Customizer.
+        if (rescued.Count > 0 && kept.Count > 0)
+        {
+            List<Trivia> license =
+                [.. rescued.Where(static t => t is not CommentTrivia { Sticky: true, Text: "/* [Hidden] */" })];
+            if (license.Count > 0)
+            {
+                kept[0] = kept[0] with { LeadingTrivia = [.. license, .. kept[0].LeadingTrivia] };
+            }
         }
 
         context.RemovedCount += removed;

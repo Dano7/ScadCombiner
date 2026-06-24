@@ -177,6 +177,71 @@ public sealed class AttributionTests
             t => t.Contains("========", StringComparison.Ordinal));
     }
 
+    [Fact]
+    public void ParametersFirst_EmitsLicenseHeaderBelowTheParameterPrologue()
+    {
+        // ADR 0002: the opt-in --parameters-first flag emits the aggregated header below the Customizer
+        // parameters (so they lead the file) instead of above them — a Thingiverse-Customizer workaround.
+        (ScadFile bundled, _) = BundleHelper.Bundle(
+            BundleOptions.Default with { ParametersFirst = true },
+            ("main.scad", "// (c) Root Author, CC-BY-4.0\ninclude <lib.scad>\n/* [Box] */\nwidth = 10;\npart(width);"),
+            ("lib.scad", "// (c) Lib Author, MIT\nmodule part(w) cube(w);"));
+
+        // The parameter leads the file, carrying only its Customizer group marker — no license above it.
+        Assert.Equal("width", Assert.IsType<AssignmentStatement>(bundled.Statements[0]).Name);
+        Assert.Equal(["/* [Box] */"], LeadingComments(bundled.Statements[0]));
+
+        // The aggregated header is relocated onto the first body statement, below the parameters.
+        Assert.Equal(
+            [
+                "// (c) Root Author, CC-BY-4.0",
+                BlockOpen,
+                "// -------- include <lib.scad> --------",
+                "// (c) Lib Author, MIT",
+                BlockClose,
+                "// ======== include <lib.scad> ========",
+            ],
+            LeadingComments(bundled.Statements[1]));
+    }
+
+    [Fact]
+    public void ParametersFirst_KeepsTheLicenseAboveTheHiddenFence_BelowTheParameters()
+    {
+        // With a body global (so a synthesized /* [Hidden] */ fence is needed), the relocated license
+        // sits between the parameters and the fence: parameters → license → /* [Hidden] */ → body.
+        (ScadFile bundled, _) = BundleHelper.Bundle(
+            BundleOptions.Default with { ParametersFirst = true },
+            ("main.scad", "// Root License\ninclude <lib.scad>\nwidth = 10;\npart(width);"),
+            ("lib.scad", "// Lib License\nLIBCONST = 5;\nmodule part(w) cube([w, LIBCONST, 1]);"));
+
+        Assert.Equal("width", Assert.IsType<AssignmentStatement>(bundled.Statements[0]).Name);
+        Assert.Empty(LeadingComments(bundled.Statements[0])); // no license precedes the parameter
+
+        List<string> body = [.. LeadingComments(bundled.Statements[1])];
+        Assert.Equal("// Root License", body[0]);
+        int header = body.IndexOf(BlockClose);
+        int fence = body.IndexOf("/* [Hidden] */");
+        Assert.True(header >= 0 && fence > header, "the license header must precede the Hidden fence");
+    }
+
+    [Fact]
+    public void ParametersFirst_WithNoAggregatedHeader_IsANoOp()
+    {
+        // Nothing carries a header, so there is nothing above the parameters to move: the flag leaves the
+        // placement identical to the default (the parameter still leads, with only its Customizer trivia).
+        (string Name, string Source)[] files =
+        [
+            ("main.scad", "include <lib.scad>\n/* [Box] */\nwidth = 10;\npart(width);"),
+            ("lib.scad", "module part(w) cube(w);"),
+        ];
+
+        (ScadFile withFlag, _) = BundleHelper.Bundle(BundleOptions.Default with { ParametersFirst = true }, files);
+        (ScadFile without, _) = BundleHelper.Bundle(BundleOptions.Default, files);
+
+        Assert.Equal(LeadingComments(without.Statements[0]), LeadingComments(withFlag.Statements[0]));
+        Assert.Equal(["/* [Box] */"], LeadingComments(withFlag.Statements[0]));
+    }
+
     private static IReadOnlyList<string> LeadingComments(Statement statement) =>
         [.. statement.LeadingTrivia.OfType<CommentTrivia>().Select(t => t.Text)];
 }

@@ -875,9 +875,20 @@ public static class Inliner
                 bool sticky = !_options.StripLicense;
                 IEnumerable<Trivia> header = _attribution.HeaderBlock
                     .Select(t => t is CommentTrivia comment ? comment with { Sticky = sticky } : t);
-                statements[0] = statements[0] with
+
+                // --parameters-first (ADR 0002): emit the header below the Customizer prologue (anchored
+                // to the first body statement) instead of above the parameters, so the parameters lead —
+                // a Thingiverse-Customizer compatibility workaround. The relocation is comment-only; the
+                // statement order (and so the CSG) is unchanged. It only applies when there is both a
+                // prologue to protect and a body statement below it to host the header. With no prologue
+                // there is no knob to keep above the header; with a prologue but no body statement (a
+                // parameters-only bundle) there is nowhere below the parameters to anchor the header, so
+                // it stays at the top — moot there, as such a bundle has no body geometry to render.
+                int bodyStart = statements.Count - rest.Count;
+                int anchor = _options.ParametersFirst && bodyStart > 0 && rest.Count > 0 ? bodyStart : 0;
+                statements[anchor] = statements[anchor] with
                 {
-                    LeadingTrivia = [.. header, .. statements[0].LeadingTrivia],
+                    LeadingTrivia = [.. header, .. statements[anchor].LeadingTrivia],
                 };
             }
 

@@ -68,7 +68,8 @@ internal static class BundleCommand
             options.PreserveComments,
             hardening,
             options.StripLicense,
-            options.Lint);
+            options.Lint,
+            options.ParametersFirst);
 
         // Emit: minify collapses whitespace + drops non-sticky comments; obfuscate keeps formatting but
         // drops ordinary comments (the aggregated license + Customizer fence are sticky and survive both).
@@ -146,6 +147,8 @@ internal static class BundleCommand
 
         public bool StripLicense { get; set; }
 
+        public bool ParametersFirst { get; set; }
+
         public bool DryRun { get; set; }
 
         public bool Diff { get; set; }
@@ -221,6 +224,9 @@ internal static class BundleCommand
                     break;
                 case "--strip-license":
                     options.StripLicense = true;
+                    break;
+                case "--parameters-first":
+                    options.ParametersFirst = true;
                     break;
                 case "--dry-run":
                     options.DryRun = true;
@@ -436,6 +442,10 @@ internal static class BundleCommand
                                      indirection, decoys, decomposed strings (mutually exclusive
                                      with --minify; keeps the license header)
           --strip-license            Drop the aggregated license header under --minify/--obfuscate
+          --parameters-first         Emit Customizer parameters above the license header (not below),
+                                     so they lead the file. Opt-in workaround for Thingiverse's
+                                     Customizer, which fails to read parameters that follow a long
+                                     leading comment block. Comment-only — the geometry is unchanged
           --dry-run                  Run the pipeline but write nothing
           --diff                     Print a unified diff of input vs bundled output
           --verbose                  List inlined files, renames, and normalizations

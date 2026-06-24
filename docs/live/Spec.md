@@ -159,6 +159,7 @@ field (no new behavior is introduced by the web app):
 | **Advanced ▸ Collision strategy** | Auto | `OnCollision` (`--on-collision auto/prefix/error/keep-first/keep-last`) | Auto is correct for almost everyone; exposed for parity. |
 | **Advanced ▸ ☐ Strip license under minify/obfuscate** | off | `StripLicense = true` (`--strip-license`) | Only meaningful with a hardening profile. |
 | **Advanced ▸ ☐ Keep comments** | on | `EmitOptions.PreserveComments` / `BundleOptions.PreserveComments` (`--[no-]preserve-comments`) | Ignored under minify (comments already dropped). |
+| **Advanced ▸ ☐ Customizer parameters first (Thingiverse fix)** | off | `ParametersFirst = true` (`--parameters-first`) | Opt-in workaround for Thingiverse's Customizer; emits the parameters above the license header. Comment-only — geometry unchanged. See [ADR 0002](../adr/0002-parameters-first-customizer-hoist.md). |
 
 The mapping is implemented once, in the facade's `WebBundleOptions` → `BundleOptions` + `EmitOptions`
 translation (§5.4), which mirrors [`BundleCommand`](../../src/ScadBundler/BundleCommand.cs) so a Live
@@ -272,7 +273,8 @@ public sealed record WebBundleOptions(
     HardeningProfile Hardening = HardeningProfile.None,   // existing enum (Inlining)
     bool StripLicense = false,
     CollisionStrategy OnCollision = CollisionStrategy.Auto, // existing enum (Inlining)
-    bool PreserveComments = true);
+    bool PreserveComments = true,
+    bool ParametersFirst = false);                        // --parameters-first (ADR 0002)
 
 public sealed record BundleStats(
     int FilesInlined, int OutputBytes, int Renames, int DefinitionsRemoved, int Normalizations);

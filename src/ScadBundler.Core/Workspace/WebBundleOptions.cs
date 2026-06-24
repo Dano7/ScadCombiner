@@ -17,9 +17,13 @@ namespace ScadBundler.Core.Workspace;
 /// <param name="OnCollision">The collision-resolution strategy (<c>--on-collision</c>).</param>
 /// <param name="PreserveComments">When <c>true</c> (default), keep comments (<c>--[no-]preserve-comments</c>);
 /// ignored under minify (comments are already dropped).</param>
+/// <param name="ParametersFirst">When <c>true</c>, emit Customizer parameters above the aggregated license
+/// header so they lead the file (<c>--parameters-first</c>); an opt-in Thingiverse-Customizer compatibility
+/// workaround. Default <c>false</c>.</param>
 public sealed record WebBundleOptions(
     bool BundleLicenses = true,
     HardeningProfile Hardening = HardeningProfile.None,
     bool StripLicense = false,
     CollisionStrategy OnCollision = CollisionStrategy.Auto,
-    bool PreserveComments = true);
+    bool PreserveComments = true,
+    bool ParametersFirst = false);

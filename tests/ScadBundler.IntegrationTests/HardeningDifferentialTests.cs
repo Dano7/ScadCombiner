@@ -27,4 +27,18 @@ public sealed class HardeningDifferentialTests
     public void Obfuscate_RendersIdentically() =>
         DifferentialAssert.BundleRendersIdentically(
             Fixture(), BundleOptions.Default with { Hardening = HardeningProfile.Obfuscate });
+
+    /// <summary>--parameters-first (ADR 0002): relocating the license header below the parameters is a
+    /// comment-only change, so the geometry is unchanged.</summary>
+    [OpenScadFact]
+    public void ParametersFirst_RendersIdentically() =>
+        DifferentialAssert.BundleRendersIdentically(
+            Fixture(), BundleOptions.Default with { ParametersFirst = true });
+
+    /// <summary>--parameters-first under minify: the relocated header rides on a tree-shakeable body
+    /// statement, so this also proves DeadCodeElimination's sticky-trivia carry-forward is render-safe.</summary>
+    [OpenScadFact]
+    public void ParametersFirstMinify_RendersIdentically() =>
+        DifferentialAssert.BundleRendersIdentically(
+            Fixture(), BundleOptions.Default with { Hardening = HardeningProfile.Minify, ParametersFirst = true });
 }

@@ -245,6 +245,28 @@ public sealed class CliTests
     }
 
     [Fact]
+    public void ParametersFirst_HoistsCustomizerParametersAboveTheLicenseHeader()
+    {
+        using var project = new TempProject(
+            ("main.scad", "// (c) Root Author, CC-BY-4.0\ninclude <lib.scad>\n/* [Box] */\nwidth = 10;\npart(width);"),
+            ("lib.scad", "// (c) Lib Author, MIT\nmodule part(w) cube(w);"));
+
+        int exit = Run(
+            project,
+            ["bundle", project.Path("main.scad"), "-o", "-", "--parameters-first"],
+            out string stdout,
+            out _);
+
+        Assert.Equal(0, exit);
+        // The Customizer group + parameter lead the file…
+        Assert.StartsWith("/* [Box] */\nwidth = 10;", stdout, StringComparison.Ordinal);
+        // …and both license headers follow them (relocated, not dropped).
+        int param = stdout.IndexOf("width = 10;", StringComparison.Ordinal);
+        Assert.True(param < stdout.IndexOf("// (c) Root Author", StringComparison.Ordinal));
+        Assert.Contains("// (c) Lib Author, MIT", stdout, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void MinifyAndObfuscate_AreMutuallyExclusive_ExitsTwo()
     {
         using var project = new TempProject(("main.scad", "cube(1);"));

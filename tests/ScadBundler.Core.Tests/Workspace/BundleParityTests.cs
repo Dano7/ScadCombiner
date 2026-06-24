@@ -103,6 +103,8 @@ public sealed class BundleParityTests
             new(Hardening: HardeningProfile.Minify, OnCollision: CollisionStrategy.Prefix),
             new(Hardening: HardeningProfile.Minify, PreserveComments: false),
             new(Hardening: HardeningProfile.Obfuscate, StripLicense: true, OnCollision: CollisionStrategy.KeepLast),
+            new(ParametersFirst: true),
+            new(Hardening: HardeningProfile.Minify, ParametersFirst: true),
         ];
 
         foreach (WebBundleOptions options in permutations)
@@ -144,7 +146,8 @@ public sealed class BundleParityTests
                 options.BundleLicenses,
                 options.PreserveComments,
                 options.Hardening,
-                options.StripLicense);
+                options.StripLicense,
+                ParametersFirst: options.ParametersFirst);
             var emitOptions = new EmitOptions(
                 Minify: options.Hardening == HardeningProfile.Minify,
                 PreserveComments: options.Hardening == HardeningProfile.None && options.PreserveComments);

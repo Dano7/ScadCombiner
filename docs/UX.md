@@ -16,6 +16,7 @@ scadbundler bundle <input.scad> [options]
 - `--minify`: **Minimize bundle size** (Slice 7). An AST-level pass — tree-shakes unreferenced definitions, shortens every identifier, canonicalizes number literals — followed by whitespace/comment stripping. Incidentally unreadable. Keeps the aggregated license header (use `--strip-license` to drop it).
 - `--obfuscate`: **Maximize the cost of reverse-engineering** the bundle (Slice 7). Opaque identifiers, reference-transparent indirection, render-inert decoys (uncalled modules + `*`-disabled calls), and decomposed strings (`"ab"`→`str(chr(97),chr(98))`). Output may be *larger* than the input. Mutually exclusive with `--minify` (giving both is a usage error, exit 2). Keeps the license header unless `--strip-license`.
 - `--strip-license`: Drop the aggregated license header under `--minify`/`--obfuscate` (for when you own all the sources). Default is to **keep** it — the downloader of a hardened model still gets the legal text.
+- `--parameters-first`: **Platform-compatibility workaround (opt-in).** Emit the Customizer parameters *above* the aggregated license header so they lead the file, instead of below it. For Thingiverse, whose Customizer fails to surface parameters that follow a long leading comment block (see **Platform compatibility** below). Comment-relocation only — the geometry is unchanged and the license still appears, just below the parameters. A no-op when there is no aggregated header to move (e.g. `--no-bundle-licenses`) or no Customizer parameters. See [ADR 0002](adr/0002-parameters-first-customizer-hoist.md).
 - `--dry-run`: Show what would be done without writing output
 - `--verbose`: Detailed logging of inlined files and transformations
 - `--diff`: Show diff between input and bundled output
@@ -73,6 +74,32 @@ rationale in [slices/Slice-7-Minify-Obfuscate.md](slices/Slice-7-Minify-Obfuscat
   downloader still gets the legal text); per-section provenance banners and ordinary comments (those not
   driving the Customizer) are dropped. `--strip-license` opts out.
 - **Mutually exclusive.** `--minify --obfuscate` together is a usage error (exit 2).
+
+## Platform compatibility (Thingiverse): `--parameters-first`
+
+Bundles render correctly on MakerWorld and generally on Thingiverse, but Thingiverse's Customizer is
+**out of spec** in one observable way: when a long run of comments precedes the first Customizer
+parameter, its parameter parser fails to surface the parameters at all. The default bundle layout puts
+exactly such a run there — the aggregated license/attribution header (`--bundle-licenses`, default on)
+is hoisted to the very top, *above* the parameters.
+
+`--parameters-first` flips that one attachment: the parameters lead the file and the license header
+follows them (`parameters → license header → /* [Hidden] */ → body`). It is the automatic form of the
+manual fix — moving the parameters above the license — that makes Thingiverse list them correctly.
+
+- **Opt-in by design.** This is a workaround for one platform's non-conforming parser, not a better
+  default; ScadBundler's default keeps attribution at the top (credits lead). Turn it on only when you
+  need it.
+- **Comment-relocation only — geometry unchanged.** The parameter prologue is already hoisted to the
+  top and protected by the inliner; the flag only moves *where the header comments are emitted*. No
+  statement reorders, so the rendered CSG is byte-identical (proven against the official binary).
+- **The license is relocated, never dropped.** It still appears in the bundle, just below the
+  parameters — including under `--minify`/`--obfuscate` (sticky, unless `--strip-license`). A casual
+  viewer therefore sees the Customizer knobs first and the attribution second.
+- **Composes with `--minify`.** Thingiverse also appears to enforce a ~1–2 s render-time limit (no
+  public docs); a model too complex to render in time fails regardless, which is outside this tool's
+  scope. `--minify` is the only lever, and `--minify --parameters-first` is the combination for a
+  complex model that also needs its Customizer read correctly.
 
 ## Expected Behavior
 - Smart resolution of `include` and `use` with cycle detection.

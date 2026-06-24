@@ -270,6 +270,46 @@ public sealed class TransformTests
         Assert.Empty(bag.ToList());
     }
 
+    [Fact]
+    public void ParametersFirst_LicenseSurvivesMinify_EvenWhenItsHostStatementIsTreeShaken()
+    {
+        // ADR 0002: --parameters-first relocates the sticky license header onto the first body statement.
+        // Here that statement (an unreferenced use-imported module) is tree-shaken by minify — the license
+        // must not go with it. DeadCodeElimination carries sticky leading trivia forward to the next kept
+        // statement, so the legal text still leads the body.
+        BundleOptions options = BundleOptions.Default with { Hardening = HardeningProfile.Minify, ParametersFirst = true };
+        ScadFile bundle = Harden(
+            options,
+            ("main.scad", "// (c) Author, MIT\nuse <lib.scad>\nwidth = 10;\nkeeper(width);"),
+            ("lib.scad", "module dead() cube(1);\nmodule keeper(w) cube(w);")).Bundle;
+
+        string minified = Emitter.Emit(bundle, EmitFor(HardeningProfile.Minify));
+
+        Assert.Contains("// (c) Author, MIT", minified, StringComparison.Ordinal); // license survives the drop
+        Assert.DoesNotContain("cube(1)", minified, StringComparison.Ordinal);       // the dead module was tree-shaken
+    }
+
+    [Fact]
+    public void ParametersFirst_LicenseSurvivesMinify_EvenWhenTheWholeBodyIsTreeShaken()
+    {
+        // Edge of the carry-forward: the entire body (the header's host plus everything after it) is
+        // tree-shaken, so no later statement can catch the rescued trivia. The license must still be
+        // re-homed atop the surviving parameters — but the now-purposeless /* [Hidden] */ fence must NOT
+        // be (placing it above the parameters would hide them from the Customizer).
+        BundleOptions options = BundleOptions.Default with { Hardening = HardeningProfile.Minify, ParametersFirst = true };
+        ScadFile bundle = Harden(
+            options,
+            ("main.scad", "// (c) Author, MIT\nwidth = 10;\nmodule helper() cube(1);\nDEAD = width;\nmodule unused() cube([width, DEAD, 1]);"))
+            .Bundle;
+
+        string minified = Emitter.Emit(bundle, EmitFor(HardeningProfile.Minify));
+
+        Assert.Contains("// (c) Author, MIT", minified, StringComparison.Ordinal);     // attribution preserved
+        Assert.DoesNotContain("/* [Hidden] */", minified, StringComparison.Ordinal);   // fence dropped, not hiding params
+        AssignmentStatement first = Assert.IsType<AssignmentStatement>(bundle.Statements[0]);
+        Assert.Equal("width", first.Name);                                             // the parameter still leads
+    }
+
     // ---------------------------------------------------------------------------------------------
     // Helpers
     // ---------------------------------------------------------------------------------------------

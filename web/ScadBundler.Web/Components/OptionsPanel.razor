@@ -85,6 +85,17 @@
                         <span class="opt-note">Ignored under Minify (comments are dropped to save space).</span>
                     </span>
                 </label>
+
+                <label class="opt-row">
+                    <input type="checkbox" checked="@Opts.ParametersFirst" @onchange="OnParametersFirstChanged" />
+                    <span>
+                        Customizer parameters first (Thingiverse fix)
+                        <span class="opt-note">Puts the Customizer parameters above the license header so
+                            they lead the file. Thingiverse's Customizer can't read parameters that follow
+                            a long leading comment block; tick this if its preview shows none. The license
+                            still appears, just below the parameters.</span>
+                    </span>
+                </label>
             </div>
         </details>
     </div>
@@ -153,6 +164,9 @@
 
     private void OnPreserveCommentsChanged(ChangeEventArgs e) =>
         Controller.SetOptions(Opts with { PreserveComments = AsBool(e) });
+
+    private void OnParametersFirstChanged(ChangeEventArgs e) =>
+        Controller.SetOptions(Opts with { ParametersFirst = AsBool(e) });
 
     private static bool AsBool(ChangeEventArgs e) => e.Value is true || e.Value?.ToString() == "true";
 
