@@ -123,6 +123,21 @@ internal sealed class DeadCodeElimination : IBundleTransform
             return bundle;
         }
 
+        // If every statement after the rescued trivia's host was also removed (e.g. a parameters-only
+        // bundle whose entire body tree-shakes away), no later statement caught it. Re-home the license
+        // atop the surviving statements so attribution is never silently dropped. The /* [Hidden] */
+        // fence is deliberately NOT re-homed: with no body global left it has nothing to hide, and
+        // placing it above the parameters would wrongly hide them from the Customizer.
+        if (rescued.Count > 0 && kept.Count > 0)
+        {
+            List<Trivia> license =
+                [.. rescued.Where(static t => t is not CommentTrivia { Sticky: true, Text: "/* [Hidden] */" })];
+            if (license.Count > 0)
+            {
+                kept[0] = kept[0] with { LeadingTrivia = [.. license, .. kept[0].LeadingTrivia] };
+            }
+        }
+
         context.RemovedCount += removed;
         return bundle with { Statements = kept };
     }

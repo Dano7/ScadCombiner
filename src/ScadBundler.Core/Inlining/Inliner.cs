@@ -880,8 +880,10 @@ public static class Inliner
                 // to the first body statement) instead of above the parameters, so the parameters lead —
                 // a Thingiverse-Customizer compatibility workaround. The relocation is comment-only; the
                 // statement order (and so the CSG) is unchanged. It only applies when there is both a
-                // prologue to protect and a body statement to host the header; otherwise (no prologue, or
-                // a parameters-only bundle) the header stays at the top, where it cannot precede a knob.
+                // prologue to protect and a body statement below it to host the header. With no prologue
+                // there is no knob to keep above the header; with a prologue but no body statement (a
+                // parameters-only bundle) there is nowhere below the parameters to anchor the header, so
+                // it stays at the top — moot there, as such a bundle has no body geometry to render.
                 int bodyStart = statements.Count - rest.Count;
                 int anchor = _options.ParametersFirst && bodyStart > 0 && rest.Count > 0 ? bodyStart : 0;
                 statements[anchor] = statements[anchor] with

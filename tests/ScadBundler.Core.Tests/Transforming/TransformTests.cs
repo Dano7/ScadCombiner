@@ -289,6 +289,27 @@ public sealed class TransformTests
         Assert.DoesNotContain("cube(1)", minified, StringComparison.Ordinal);       // the dead module was tree-shaken
     }
 
+    [Fact]
+    public void ParametersFirst_LicenseSurvivesMinify_EvenWhenTheWholeBodyIsTreeShaken()
+    {
+        // Edge of the carry-forward: the entire body (the header's host plus everything after it) is
+        // tree-shaken, so no later statement can catch the rescued trivia. The license must still be
+        // re-homed atop the surviving parameters — but the now-purposeless /* [Hidden] */ fence must NOT
+        // be (placing it above the parameters would hide them from the Customizer).
+        BundleOptions options = BundleOptions.Default with { Hardening = HardeningProfile.Minify, ParametersFirst = true };
+        ScadFile bundle = Harden(
+            options,
+            ("main.scad", "// (c) Author, MIT\nwidth = 10;\nmodule helper() cube(1);\nDEAD = width;\nmodule unused() cube([width, DEAD, 1]);"))
+            .Bundle;
+
+        string minified = Emitter.Emit(bundle, EmitFor(HardeningProfile.Minify));
+
+        Assert.Contains("// (c) Author, MIT", minified, StringComparison.Ordinal);     // attribution preserved
+        Assert.DoesNotContain("/* [Hidden] */", minified, StringComparison.Ordinal);   // fence dropped, not hiding params
+        AssignmentStatement first = Assert.IsType<AssignmentStatement>(bundle.Statements[0]);
+        Assert.Equal("width", first.Name);                                             // the parameter still leads
+    }
+
     // ---------------------------------------------------------------------------------------------
     // Helpers
     // ---------------------------------------------------------------------------------------------
