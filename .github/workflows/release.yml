@@ -34,7 +34,7 @@ jobs:
       WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0          # MinVer needs full history + tags
 
@@ -114,7 +114,7 @@ jobs:
       # --- Publish steps run only on a version tag; a manual dispatch is a dry run. ---
       - name: Create GitHub Release
         if: ${{ github.ref_type == 'tag' }}
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: |
             dist/*.zip
